@@ -1,16 +1,16 @@
-import React, { useEffect, useState } from 'react';
-import AdminLayout from '../components/layout/AdminLayout';
 
-import UserTable from '../components/users/UserTable';
-import UserStats from '../components/users/UserStats';
-import CreateUserModal from '../components/modals/CreateUserModal';
-import EditUserModal from '../components/modals/EditUserModal';
-import DeleteUserModal from '../components/modals/DeleteUserModal';
-import { UserProvider } from '../context/UserContext';
-import axios from './../plugin/axios';
+import UserStats from '@/components/users/UserStats';
 
-const AdminDashboard: React.FC = () => {
-  const [data, setData] = useState<any>([]);
+import axios from '../../plugin/axios';
+import { useEffect, useState } from 'react'
+import UserTable from '@/components/users/UserTable';
+import CreateUserModal from '@/components/modals/CreateUserModal';
+import EditUserModal from '@/components/modals/EditUserModal';
+import DeleteUserModal from '@/components/modals/DeleteUserModal';
+
+function UserManagement() {
+
+      const [data, setData] = useState<any>([]);
 
   
 
@@ -37,12 +37,10 @@ const AdminDashboard: React.FC = () => {
     getUsers();
 
   }, []);
-
-
   return (
-    <UserProvider>
-      <AdminLayout>
-        <div className="mb-6">
+    <div>
+
+         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Account Management</h1>
           <p className="mt-1 text-sm text-gray-500">
             Manage your users, their roles, and permissions.
@@ -57,9 +55,8 @@ const AdminDashboard: React.FC = () => {
         <CreateUserModal getUsers={getUsers} />
         <EditUserModal getUsers={getUsers} />
         <DeleteUserModal />
-      </AdminLayout>
-    </UserProvider>
-  );
-};
+    </div>
+  )
+}
 
-export default AdminDashboard;
+export default UserManagement

@@ -1,6 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
+
 import './index.css'
 import { Suspense, lazy } from "react";
 
@@ -8,7 +9,7 @@ import NotFound from "./screens/notFound";
 import Loader from './components/loader/loader.tsx';
 
 const Page1= lazy(() =>
-  wait(1300).then(() => import("./screens/page1.tsx"))
+  wait(1300).then(() => import("./pages/Admin/UserManagement.tsx"))
 );
 
 
@@ -17,7 +18,7 @@ const Page2= lazy(() =>
 );
 
 const AdminDashboard= lazy(() =>
-  wait(1300).then(() => import("./pages/AdminDashboard.tsx"))
+  wait(1300).then(() => import("./pages/Admin/AdminDashboard.tsx"))
 );
 
 const router = createBrowserRouter([

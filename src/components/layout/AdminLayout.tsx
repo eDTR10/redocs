@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
 import { UserPlus, Users, LayoutDashboard, Settings, LogOut, Menu, X, Building2 } from 'lucide-react';
 import { useUsers } from '@/context/UserContext';
+import { Outlet } from 'react-router-dom';
 
-interface AdminLayoutProps {
-  children: React.ReactNode;
-}
 
-const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
+
+const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { openCreateModal } = useUsers();
@@ -143,7 +142,7 @@ const AdminLayout: React.FC<AdminLayoutProps> = ({ children }) => {
 
         {/* Page content */}
         <main className="flex-1 overflow-y-auto md:p-3 slg:p-4 lg:p-6 p-8 bg-gray-50">
-          {children}
+          <Outlet />
         </main>
       </div>
     </div>
