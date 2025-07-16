@@ -93,13 +93,26 @@ const EditUserModal = ({getUsers}:any) => {
     try {
       await axios.put(`users/update/${selectedUser.id}/`, formData, {
         headers: {
-          'Authorization': `Token ${localStorage.getItem('Token')}`
+          'Authorization': `Token ${localStorage.getItem('accessToken')}`
         }
-      });
-      setFormData(initialFormData);
+      }).then(()=>{
+
+        Swal.fire({
+          icon: 'success',
+          title: 'User Updated Successfully',
+          text: `User ${formData.first_name} ${formData.last_name} has been updated.`,
+          showConfirmButton: false,
+          timer: 1500
+      })
       getUsers();
+       setFormData(initialFormData);
+ 
       setErrors({});
-    closeEditModal();
+          closeEditModal();
+    })
+      
+      
+      
     } catch (error) {
       // Optionally handle error here
     } finally {
