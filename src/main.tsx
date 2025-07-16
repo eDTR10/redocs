@@ -21,29 +21,42 @@ const AdminDashboard= lazy(() =>
   wait(1300).then(() => import("./pages/Admin/AdminDashboard.tsx"))
 );
 
+
+const UserMainContainer = lazy(() =>
+  wait(1300).then(() => import("./pages/User/UserMainContainer.tsx"))
+);
+const Login= lazy(() =>
+  wait(1300).then(() => import("./pages/Auth/Login.tsx"))
+);
 const router = createBrowserRouter([
   {
-    path: "/redocs/",
+    path: "/redocs",
+    element: <>
+        <Suspense fallback={<Loader />}>
+          <Login />
+        </Suspense>
+      </>,
+  },
+  {
+    path: "/redocs/user",
+    element: <UserMainContainer/>,
+    
+    children: []
+  },
+  {
+    path: "/redocs/admin",
     element: <AdminDashboard/>,
     
     children: [
       {
-        path: "/redocs/", 
-        element: <Navigate to="/redocs/page1" />, 
+        path: "/redocs/admin", 
+        element: <Navigate to="/redocs/admin/user" />, 
       },
       {
-        path: "/redocs/page1",
+        path: "/redocs/admin/user",
         element: <>
         <Suspense fallback={<Loader />}>
           <Page1 />
-        </Suspense>
-      </>,
-      },
-      {
-        path: "/redocs/page2",
-        element: <>
-        <Suspense fallback={<Loader />}>
-          <Page2 />
         </Suspense>
       </>,
       },
