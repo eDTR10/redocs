@@ -11,9 +11,7 @@ const AdminDashboard = () => {
 
   return (
     <UserProvider>
-      <AdminLayout>
-       
-      </AdminLayout>
+      <AdminLayout/>
     </UserProvider>
   );
 };

@@ -43,11 +43,11 @@ const SearchableSelect: React.FC<SearchableSelectProps> = ({
   );
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleClickOutside:any = (event: any) => {
       if (
         refs.floating.current &&
         !refs.floating.current.contains(event.target as Node) &&
-        !refs.reference.current?.contains(event.target as Node)
+        !refs.reference.current
       ) {
         setIsOpen(false);
         setSearchTerm('');

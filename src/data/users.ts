@@ -49,12 +49,12 @@ export const initialUsers: User[] = [
 ];
 
 // Get unique projects from users
-export const getUniqueProjects = (users: User[]): string[] => {
+export const getUniqueProjects = (_users: User[]): string[] => {
   return  ["eGov","eLGU","ILCDB","Free Wifi"]};
 
 
 // Get unique designations from users
-export const getUniqueDesignations = (users: User[]): string[] => {
+export const getUniqueDesignations = (_users: User[]): string[] => {
 
 
   return ["eGov","eLGU","ILCDB","Free Wifi"]};
