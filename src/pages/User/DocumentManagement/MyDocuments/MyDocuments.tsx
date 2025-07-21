@@ -14,23 +14,23 @@ import {
     Truck
 } from 'lucide-react';
 import DocumentDialog from './dialogs/DocumentDialog';
-import { MyDocument } from '../../../../interfaces/Document';
+
 
 const MyDocuments = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
     const [typeFilter, setTypeFilter] = useState('');
     const [dateFilter, setDateFilter] = useState('');
-    const [sortField, setSortField] = useState<keyof MyDocument>('dateCreated');
+    const [sortField, setSortField] = useState<keyof any>('dateCreated');
     const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
     // Dialog states
     const [isDialogOpen, setIsDialogOpen] = useState(false);
-    const [selectedDocument, setSelectedDocument] = useState<MyDocument | null>(null);
+    const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
     const [dialogMode, setDialogMode] = useState<'view' | 'edit'>('view');
 
     // Sample data - replace with actual data from your API
-    const documents: MyDocument[] = [
+    const documents: any[] = [
         {
             id: '1',
             name: 'Project Guidelines 2024',
@@ -130,13 +130,13 @@ const MyDocuments = () => {
     ];
 
     // Dialog handlers
-    const handleViewDocument = (document: MyDocument) => {
+    const handleViewDocument = (document: any) => {
         setSelectedDocument(document);
         setDialogMode('view');
         setIsDialogOpen(true);
     };
 
-    const handleEditDocument = (document: MyDocument) => {
+    const handleEditDocument = (document: any) => {
         setSelectedDocument(document);
         setDialogMode('edit');
         setIsDialogOpen(true);
@@ -154,12 +154,12 @@ const MyDocuments = () => {
         handleCloseDialog();
     };
 
-    const handleDownloadDocument = (document: MyDocument) => {
+    const handleDownloadDocument = (document: any) => {
         // Here you would typically trigger a download
         console.log('Downloading document:', document.name);
     };
 
-    const handleDeleteDocument = (document: MyDocument) => {
+    const handleDeleteDocument = (document: any) => {
         // Here you would typically show a confirmation dialog and delete the document
         console.log('Deleting document:', document.name);
     };
@@ -193,7 +193,7 @@ const MyDocuments = () => {
         return filtered;
     }, [documents, searchTerm, statusFilter, typeFilter, dateFilter, sortField, sortDirection]);
 
-    const handleSort = (field: keyof MyDocument) => {
+    const handleSort = (field: keyof any) => {
         if (sortField === field) {
             setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
         } else {

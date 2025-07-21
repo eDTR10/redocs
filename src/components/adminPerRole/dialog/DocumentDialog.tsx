@@ -26,8 +26,6 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
     isOpen,
     onClose,
     document,
-    mode,
-    onSave
 }) => {
     const [editedDocument, setEditedDocument] = useState<any | null>(null);
 
