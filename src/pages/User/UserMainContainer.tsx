@@ -1,7 +1,8 @@
+import UserLayout from "@/components/layout/UserLayout"
 
 function UserMainContainer() {
   return (
-    <div>UserMainContainer</div>
+    <UserLayout />
   )
 }
 

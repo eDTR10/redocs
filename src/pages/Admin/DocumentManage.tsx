@@ -2,11 +2,11 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Download, Upload, Plus, Trash2, Save, Eye, Settings, List, Move, Edit, X } from 'lucide-react';
 
 function DocumentManage() {
-  const [pdfFile, setPdfFile] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [fields, setFields] = useState([]);
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [fields, setFields] = useState<Field[]>([]);
   const [showFieldModal, setShowFieldModal] = useState(false);
-  const [currentField, setCurrentField] = useState({
+  const [currentField, setCurrentField] = useState<Field>({
     id: '',
     label: '',
     type: 'text',
@@ -33,7 +33,7 @@ function DocumentManage() {
   const [showPreview, setShowPreview] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
-  const [currentRect, setCurrentRect] = useState(null);
+  const [currentRect, setCurrentRect] = useState<Coordinates | null>(null);
   const [drawingMode, setDrawingMode] = useState(false);
   const [editingField, setEditingField] = useState(null);
   const [showPreviewMode, setShowPreviewMode] = useState(false);
@@ -48,14 +48,16 @@ function DocumentManage() {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
       script.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
       };
       document.head.appendChild(script);
     }
   }, []);
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file && file.type === 'application/pdf') {
       setPdfFile(file);
       const url = URL.createObjectURL(file);
@@ -64,29 +66,33 @@ function DocumentManage() {
     }
   };
 
-  const renderPDF = async (url) => {
+  const renderPDF = async (url: string) => {
     if (!window.pdfjsLib) return;
-    
+
     try {
       const pdf = await window.pdfjsLib.getDocument(url).promise;
       const page = await pdf.getPage(1);
       const scale = 1.5;
       const viewport = page.getViewport({ scale });
-      
+
       const canvas = canvasRef.current;
       const overlayCanvas = overlayCanvasRef.current;
+
+      if (!canvas || !overlayCanvas) return;
+
       const context = canvas.getContext('2d');
-      
+      if (!context) return;
+
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       overlayCanvas.height = viewport.height;
       overlayCanvas.width = viewport.width;
-      
+
       const renderContext = {
         canvasContext: context,
         viewport: viewport
       };
-      
+
       await page.render(renderContext).promise;
       drawOverlay();
     } catch (error) {
@@ -94,8 +100,10 @@ function DocumentManage() {
     }
   };
 
-  const getCanvasCoordinates = (e) => {
+  const getCanvasCoordinates = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+
     const rect = canvas.getBoundingClientRect();
     return {
       x: e.clientX - rect.left,
@@ -103,9 +111,9 @@ function DocumentManage() {
     };
   };
 
-  const handleMouseDown = (e) => {
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!drawingMode) return;
-    
+
     const point = getCanvasCoordinates(e);
     setIsDrawing(true);
     setStartPoint(point);
@@ -117,9 +125,9 @@ function DocumentManage() {
     });
   };
 
-  const handleMouseMove = (e) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !drawingMode) return;
-    
+
     const point = getCanvasCoordinates(e);
     const newRect = {
       x: Math.min(startPoint.x, point.x),
@@ -127,14 +135,14 @@ function DocumentManage() {
       width: Math.abs(point.x - startPoint.x),
       height: Math.abs(point.y - startPoint.y)
     };
-    
+
     setCurrentRect(newRect);
     drawOverlay();
   };
 
-  const handleMouseUp = (e) => {
+  const handleMouseUp = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDrawing || !drawingMode) return;
-    
+
     const point = getCanvasCoordinates(e);
     const finalRect = {
       x: Math.min(startPoint.x, point.x),
@@ -142,7 +150,7 @@ function DocumentManage() {
       width: Math.abs(point.x - startPoint.x),
       height: Math.abs(point.y - startPoint.y)
     };
-    
+
     if (finalRect.width > 10 && finalRect.height > 10) {
       setCurrentField({
         id: `field_${Date.now()}`,
@@ -165,13 +173,13 @@ function DocumentManage() {
       });
       setShowFieldModal(true);
     }
-    
+
     setIsDrawing(false);
     setCurrentRect(null);
     setDrawingMode(false);
   };
 
-  const getFieldColor = (fieldType) => {
+  const getFieldColor = (fieldType: Field['type']) => {
     const colors = {
       text: { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.1)' },
       number: { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.1)' },
@@ -184,21 +192,23 @@ function DocumentManage() {
       list: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.1)' },
       table: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' }
     };
-    return colors[fieldType] || colors.text;
+    return colors[fieldType];
   };
 
   const drawOverlay = () => {
     const overlayCanvas = overlayCanvasRef.current;
     const canvas = canvasRef.current;
-    
+
     if (!overlayCanvas || !canvas) return;
-    
+
     overlayCanvas.width = canvas.width;
     overlayCanvas.height = canvas.height;
-    
+
     const ctx = overlayCanvas.getContext('2d');
+    if (!ctx) return;
+
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-    
+
     // Draw existing fields
     fields.forEach(field => {
       if (field.coordinates) {
@@ -455,7 +465,7 @@ function DocumentManage() {
       ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
-      
+
       ctx.fillRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       
@@ -501,7 +511,7 @@ function DocumentManage() {
     drawOverlay();
   };
 
-  const removeField = (id) => {
+  const removeField = (id: string) => {
     setFields(fields.filter(field => field.id !== id));
     setTimeout(drawOverlay, 0);
   };
@@ -541,7 +551,7 @@ function DocumentManage() {
           color: '#000000'
         }
       })),
-      schema: fields.reduce((acc, field) => {
+      schema: fields.reduce((acc: Record<string, any>, field) => {
         acc[field.id] = {
           type: field.type,
           required: field.required,
@@ -556,7 +566,7 @@ function DocumentManage() {
       },
       _footer: "xxx nothing follows xxx"
     };
-    
+
     const jsonString = JSON.stringify(template, null, 2);
     setJsonTemplate(jsonString);
   };
@@ -578,7 +588,7 @@ function DocumentManage() {
     });
   };
 
-  const updateOption = (index, value) => {
+  const updateOption = (index: number, value: string) => {
     const newOptions = [...currentField.options];
     newOptions[index] = value;
     setCurrentField({
@@ -587,7 +597,7 @@ function DocumentManage() {
     });
   };
 
-  const removeOption = (index) => {
+  const removeOption = (index: number) => {
     setCurrentField({
       ...currentField,
       options: currentField.options.filter((_, i) => i !== index)
@@ -867,7 +877,7 @@ function DocumentManage() {
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
-          
+
           {/* File Upload Section */}
           <div className="mb-6">
             <div className="flex items-center gap-4 mb-4">
@@ -972,7 +982,7 @@ function DocumentManage() {
                     <canvas
                       ref={overlayCanvasRef}
                       className="absolute top-0 left-0 border border-gray-300 max-w-full pointer-events-none"
-                      style={{ 
+                      style={{
                         cursor: drawingMode ? 'crosshair' : 'default',
                         pointerEvents: drawingMode ? 'auto' : 'none'
                       }}
@@ -1114,7 +1124,7 @@ function DocumentManage() {
                   <Save size={20} />
                   Generate Template
                 </button>
-                
+
                 <button
                   onClick={() => setShowPreview(!showPreview)}
                   disabled={!jsonTemplate}
@@ -1123,7 +1133,7 @@ function DocumentManage() {
                   <Eye size={20} />
                   {showPreview ? 'Hide' : 'Show'} JSON
                 </button>
-                
+
                 <button
                   onClick={downloadTemplate}
                   disabled={!jsonTemplate}
@@ -1168,13 +1178,13 @@ function DocumentManage() {
                   Selected Area
                 </label>
                 <div className="p-2 bg-gray-100 rounded border text-sm">
-                  {currentField.coordinates ? 
-                    `Rectangle: ${Math.round(currentField.coordinates.width)}x${Math.round(currentField.coordinates.height)}px` : 
+                  {currentField.coordinates ?
+                    `Rectangle: ${Math.round(currentField.coordinates.width)}x${Math.round(currentField.coordinates.height)}px` :
                     'No area selected'
                   }
                 </div>
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Field Label
@@ -1187,14 +1197,14 @@ function DocumentManage() {
                   placeholder="Enter field label"
                 />
               </div>
-              
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Field Type
                 </label>
                 <select
                   value={currentField.type}
-                  onChange={(e) => setCurrentField({ ...currentField, type: e.target.value })}
+                  onChange={(e) => setCurrentField({ ...currentField, type: e.target.value as Field['type'] })}
                   className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 >
                   <option value="text">Text</option>
@@ -1208,7 +1218,7 @@ function DocumentManage() {
                   <option value="table">Table</option>
                 </select>
               </div>
-              
+
               {(currentField.type === 'select' || currentField.type === 'checkbox') && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1412,7 +1422,7 @@ function DocumentManage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex justify-end gap-3 mt-6">
               <button
                 onClick={() => setShowFieldModal(false)}
