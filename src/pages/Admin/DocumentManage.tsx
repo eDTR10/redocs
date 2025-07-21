@@ -1,11 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, Upload, Plus, Trash2, Save, Eye, Settings, List, Move, Edit, X } from 'lucide-react';
+import Template1 from '/PR.pdf'
 
 function DocumentManage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [fields, setFields] = useState<Field[]>([]);
   const [showFieldModal, setShowFieldModal] = useState(false);
+
+  const TEMPLATES = [
+  { id: 'template1', name: 'Purchase Request Form 1', path: Template1 },
+  
+];
   const [currentField, setCurrentField] = useState<Field>({
     id: '',
     label: '',
@@ -881,13 +887,33 @@ function DocumentManage() {
           {/* File Upload Section */}
           <div className="mb-6">
             <div className="flex items-center gap-4 mb-4">
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+              <select
+                onChange={(e) => {
+                  const template = TEMPLATES.find(t => t.id === e.target.value);
+                  if (template) {
+                    // Create a fake File object from the template path
+                    fetch(template.path)
+                      .then(res => res.blob())
+                      .then(blob => {
+                        const file = new File([blob], template.name + '.pdf', { type: 'application/pdf' });
+                        setPdfFile(file);
+                        const url = URL.createObjectURL(file);
+                        setPdfUrl(url);
+                        renderPDF(url);
+                      });
+                  }
+                }}
+                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                defaultValue=""
               >
-                <Upload size={20} />
-                Upload PDF
-              </button>
+                <option value="" disabled>Select Template</option>
+                {TEMPLATES.map(template => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+
               <button
                 onClick={() => {
                   const input = document.createElement('input');
