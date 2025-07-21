@@ -5,6 +5,7 @@ import { UserFormData } from '../../types/User';
 import SearchableSelect from '../common/SearchableSelect';
 import { getUniqueProjects} from '../../data/users';
 import axios from 'axios';
+import Swal from 'sweetalert2';
 
 const initialFormData: UserFormData = {
   email: '',
@@ -70,7 +71,15 @@ const CreateUserModal= ({getUsers}:any) => {
 
     setLoading(true); // <-- Start loading
     try {
-      await axios.post('/users/', formData);
+      await axios.post('/users/', formData).then(() => {
+        Swal.fire({
+          icon: 'success',
+          title: 'User Created Successfully',
+          text: `User ${formData.first_name} ${formData.last_name} has been created.`,
+          showConfirmButton: false,
+          timer: 1500
+        })
+      });
       getUsers();
       setFormData(initialFormData);
       closeCreateModal();

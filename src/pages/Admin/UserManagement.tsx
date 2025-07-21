@@ -19,7 +19,7 @@ function UserManagement() {
   axios.get('users/all/',
     {
       headers: {
-        'Authorization': `Token 3d43a067e8a84c40a405cb1eb00306cc5b5affb6`
+        'Authorization': `Token ${localStorage.getItem('accessToken')}`
       }
     }
   )

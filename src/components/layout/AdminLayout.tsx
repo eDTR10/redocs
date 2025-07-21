@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { UserPlus, Users, LayoutDashboard, Settings, LogOut, Menu, X, Building2 } from 'lucide-react';
+import { UserPlus, Users, LayoutDashboard, Settings, LogOut, Menu, X, Building2, FileTextIcon } from 'lucide-react';
 import { useUsers } from '@/context/UserContext';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 
 
 
@@ -9,13 +9,15 @@ const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { openCreateModal } = useUsers();
-
+  const navigate = useNavigate();
   const toggleSidebar = () => {
     setSidebarOpen(!sidebarOpen);
   };
 
   const closeSidebar = () => {
+
     setSidebarOpen(false);
+    navigate('/redocs')
   };
 
   return (
@@ -73,7 +75,9 @@ const AdminLayout = () => {
               <a 
                 href="#" 
                 className="flex items-center md:px-3 px-4 py-2 text-blue-600 bg-blue-50 rounded-lg"
-                onClick={closeSidebar}
+                onClick={()=>{
+                  navigate('/redocs/admin/user');
+                }}
               >
                 <Users className="md:w-4 md:h-4 w-5 h-5 mr-3" />
                 <span className="md:text-sm text-base">User Management</span>
@@ -81,10 +85,22 @@ const AdminLayout = () => {
               <a 
                 href="#" 
                 className="flex items-center md:px-3 px-4 py-2 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors duration-200"
-                onClick={closeSidebar}
+                onClick={()=>{
+                  navigate('/redocs/admin/test');
+                }}
               >
                 <Building2 className="md:w-4 md:h-4 w-5 h-5 mr-3" />
                 <span className="md:text-sm text-base">Project Management</span>
+              </a>
+               <a 
+                href="#" 
+                className="flex items-center md:px-3 px-4 py-2 hover:text-blue-600 rounded-lg hover:bg-gray-100 transition-colors duration-200"
+                onClick={()=>{
+                  navigate('/redocs/admin/document');
+                }}
+              >
+                <FileTextIcon className="md:w-4 md:h-4 w-5 h-5 mr-3" />
+                <span className="md:text-sm text-base">Document</span>
               </a>
               <a 
                 href="#" 
