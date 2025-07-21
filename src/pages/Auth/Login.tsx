@@ -11,8 +11,10 @@ import { useState } from "react"
 import axios from "./../../plugin/axios"
 import Swal from 'sweetalert2'
 import { useNavigate } from "react-router-dom"
+import './button.css'
 
-
+import R10bg from './../../assets/r10-bg.jpg'
+import eDoc from './../../assets/eDocs-Logo.png'
 function Login() {
 
   const navigate = useNavigate()
@@ -23,47 +25,34 @@ function Login() {
     password: ""
   })
 
-  const carouselSettings = {
-    dots: true,
-    infinite: true,
-    speed: 500,
-    slidesToShow: 1,
-    slidesToScroll: 1,
-    autoplay: true,
-    autoplaySpeed: 3000,
-    draggable: true,
-    swipe: true,
-    swipeToSlide: true,
-    touchThreshold: 10,
-    cssEase: "cubic-bezier(0.87, 0.03, 0.41, 0.9)",
-    arrows: false, // Add this line to hide the arrows
-    dotsClass: "slick-dots",
-    appendDots: (dots: any) => (
-      <div className=" text-secondary-foreground" style={{ bottom: "25px" }}>
-        <ul className=" text-white " >{dots}</ul>
-      </div>
-    )
-  }
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-      <div className="flex h-screen items-center justify-center bg-background">
-        {/* Carousel Section */}
-        {/* Carousel Section */}
-        
-
-        {/* Login Form Section */}
-        <div className=" w-[30vw] border border-border lg:w-1/2 flex flex-col items-center justify-center p-8">
-          <div className="w-full max-w-md space-y-6">
+      
+      <div className="flex h-screen items-center justify-center bg-background flex-col">
+       <img src={R10bg} className=" opacity-10 w-screen h-screen object-cover absolute z-0 " alt="" />
+<p className=" text-xs fixed z-20 bottom-0 mb-10">Developed by: DICT Region 10
+            </p>
+     
+       
+        <div className=" z-10 w-[30vw] sm:w-[90%] bg-background border rounded-sm border-border  lg:w-1/2 flex flex-col items-center justify-center p-8 sm:p-5">
+      
+          <div className="w-full max-w-md ">
             <div className=" fixed top-0 right-0 p-4">
               <ModeToggle />
             </div>
 
+            
+            
 
-            <div className="space-y-2 text-center">
-              <h1 className="text-3xl font-bold text-primary">Welcome to Re-Docs</h1>
-              <p className="text-muted-foreground">Enter your credentials to login</p>
+
+            <div className="flex mb-3 justify-between items-center gap-2 text-center">
+      
+              <h1 className="text-4xl font-bold text-primary"> Sign In</h1>
+              <img className=" h-12 object-contain" src={eDoc} alt="" />
+
             </div>
+
 
             <form onSubmit={(e) => {
 
@@ -85,7 +74,7 @@ function Login() {
 
                
                   const token = e.data.auth_token;
-                  localStorage.setItem('eprojex_auth_token', token);
+                  localStorage.setItem('accessToken', token);
                 axios.get('users/me/', {
                   headers: {
                     Authorization: `Token ${token}`,
@@ -103,7 +92,7 @@ function Login() {
                     showConfirmButton: false,
                     timer: 1500,
                   })
-                  navigate('/eprojex/admin')
+                  navigate('/redocs/admin')
 
 
 
@@ -169,14 +158,14 @@ function Login() {
               </div>
               <p
 
-                className="text-sm pt-1 hover:underline text-primary cursor-pointer"
+                className="text-sm pt-1  text-primary self-end hover:underline text-end cursor-pointer"
               >
                 Forgot password?
               </p>
 
               <Button
                 type="submit"
-                className="w-full"
+                className="w-full btn-donate"
                 disabled={isLoading}
               >
                 {isLoading ? (
@@ -223,6 +212,8 @@ function Login() {
             </div>
           </div>
         </div>
+
+        
       </div>
     </ThemeProvider>
   )

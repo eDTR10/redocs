@@ -72,7 +72,7 @@ const UserTable = ({ data, getUsers }: any) => {
         is_active: !user.is_active,
       }, {
         headers: {
-          Authorization: `Token ${localStorage.getItem('Token')}`,
+          Authorization: `Token ${localStorage.getItem('accessToken')}`,
         },
       });
       getUsers();
@@ -99,7 +99,7 @@ const UserTable = ({ data, getUsers }: any) => {
     axios
       .delete(`users/delete/${id}/`, {
         headers: {
-          Authorization: `Token 3d43a067e8a84c40a405cb1eb00306cc5b5affb6`,
+          Authorization: `Token ${localStorage.getItem('accessToken')}`,
         },
       })
       .then(() => {
