@@ -1,20 +1,66 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Upload, Download, Save, Eye, FileText, CheckCircle } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
+import { Upload, Download, Eye, FileText, CheckCircle } from 'lucide-react';
+
+// Type definitions
+interface Coordinates {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+interface Field {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'email' | 'date' | 'select' | 'checkbox' | 'textarea' | 'image';
+  required: boolean;
+  options?: string[];
+  coordinates: Coordinates | null;
+  page: number;
+}
+
+interface JSONTemplate {
+  document?: {
+    name?: string;
+    version?: string;
+    created?: string;
+  };
+  fields: Field[];
+}
+
+interface PDFLib {
+  getDocument: (url: string) => { promise: Promise<any> };
+  GlobalWorkerOptions: {
+    workerSrc: string;
+  };
+}
+
+interface PDFLibrary {
+  PDFDocument: any;
+  rgb: (r: number, g: number, b: number) => any;
+}
+
+declare global {
+  interface Window {
+    pdfjsLib?: PDFLib;
+    PDFLib?: PDFLibrary;
+  }
+}
 
 function FormFiller() {
-  const [pdfFile, setPdfFile] = useState(null);
-  const [pdfUrl, setPdfUrl] = useState(null);
-  const [jsonTemplate, setJsonTemplate] = useState(null);
-  const [formData, setFormData] = useState({});
-  const [imageFiles, setImageFiles] = useState({}); // Store actual image files
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfUrl, setPdfUrl] = useState<string | null>(null);
+  const [jsonTemplate, setJsonTemplate] = useState<JSONTemplate | null>(null);
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const [imageFiles, setImageFiles] = useState<Record<string, File>>({}); // Store actual image files
   const [showPreview, setShowPreview] = useState(false);
   const [isFormValid, setIsFormValid] = useState(false);
-  const [validationErrors, setValidationErrors] = useState({});
+  const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [pdfScale, setPdfScale] = useState(1.5); // Store the scale factor
-  const canvasRef = useRef(null);
-  const overlayCanvasRef = useRef(null);
-  const pdfInputRef = useRef(null);
-  const jsonInputRef = useRef(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const overlayCanvasRef = useRef<HTMLCanvasElement>(null);
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const jsonInputRef = useRef<HTMLInputElement>(null);
 
   // PDF.js and PDF-lib setup
   useEffect(() => {
@@ -22,11 +68,13 @@ function FormFiller() {
       const script = document.createElement('script');
       script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
       script.onload = () => {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        if (window.pdfjsLib) {
+          window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        }
       };
       document.head.appendChild(script);
     }
-    
+
     // Load PDF-lib for PDF modification
     if (typeof window !== 'undefined' && !window.PDFLib) {
       const pdfLibScript = document.createElement('script');
@@ -42,8 +90,8 @@ function FormFiller() {
     }
   }, [formData, jsonTemplate]);
 
-  const handlePDFUpload = (event) => {
-    const file = event.target.files[0];
+  const handlePDFUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file && file.type === 'application/pdf') {
       setPdfFile(file);
       const url = URL.createObjectURL(file);
@@ -54,18 +102,21 @@ function FormFiller() {
     }
   };
 
-  const handleJSONUpload = (event) => {
-    const file = event.target.files[0];
+  const handleJSONUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file && file.type === 'application/json') {
       const reader = new FileReader();
       reader.onload = (e) => {
         try {
-          const template = JSON.parse(e.target.result);
+          if (!e.target?.result || typeof e.target.result !== 'string') {
+            throw new Error('Invalid file content');
+          }
+          const template: JSONTemplate = JSON.parse(e.target.result);
           setJsonTemplate(template);
-          
+
           // Initialize form data
-          const initialData = {};
-          template.fields.forEach(field => {
+          const initialData: Record<string, any> = {};
+          template.fields.forEach((field: Field) => {
             if (field.type === 'checkbox') {
               initialData[field.id] = [];
             } else {
@@ -73,7 +124,7 @@ function FormFiller() {
             }
           });
           setFormData(initialData);
-          
+
           if (pdfUrl) {
             renderPDF(pdfUrl);
           }
@@ -85,30 +136,34 @@ function FormFiller() {
     }
   };
 
-  const renderPDF = async (url) => {
+  const renderPDF = async (url: string) => {
     if (!window.pdfjsLib) return;
-    
+
     try {
       const pdf = await window.pdfjsLib.getDocument(url).promise;
       const page = await pdf.getPage(1);
       const scale = 1.5;
       setPdfScale(scale); // Store the scale for coordinate conversion
       const viewport = page.getViewport({ scale });
-      
+
       const canvas = canvasRef.current;
       const overlayCanvas = overlayCanvasRef.current;
+
+      if (!canvas || !overlayCanvas) return;
+
       const context = canvas.getContext('2d');
-      
+      if (!context) return;
+
       canvas.height = viewport.height;
       canvas.width = viewport.width;
       overlayCanvas.height = viewport.height;
       overlayCanvas.width = viewport.width;
-      
+
       const renderContext = {
         canvasContext: context,
         viewport: viewport
       };
-      
+
       await page.render(renderContext).promise;
       drawFormOverlay();
     } catch (error) {
@@ -116,7 +171,7 @@ function FormFiller() {
     }
   };
 
-  const getFieldColor = (fieldType) => {
+  const getFieldColor = (fieldType: Field['type']) => {
     const colors = {
       text: { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.1)' },
       number: { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.1)' },
@@ -127,32 +182,34 @@ function FormFiller() {
       textarea: { stroke: '#64748b', fill: 'rgba(100, 116, 139, 0.1)' },
       image: { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.1)' }
     };
-    return colors[fieldType] || colors.text;
+    return colors[fieldType];
   };
 
   const drawFormOverlay = () => {
     if (!jsonTemplate || !overlayCanvasRef.current || !canvasRef.current) return;
-    
+
     const overlayCanvas = overlayCanvasRef.current;
     const canvas = canvasRef.current;
-    
+
     overlayCanvas.width = canvas.width;
     overlayCanvas.height = canvas.height;
-    
+
     const ctx = overlayCanvas.getContext('2d');
+    if (!ctx) return;
+
     ctx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
-    
+
     jsonTemplate.fields.forEach(field => {
       if (field.coordinates) {
         const colors = getFieldColor(field.type);
         const hasError = validationErrors[field.id];
-        const hasValue = formData[field.id] && 
+        const hasValue = formData[field.id] &&
           (Array.isArray(formData[field.id]) ? formData[field.id].length > 0 : formData[field.id].toString().trim() !== '');
-        
+
         // Use error color if there's an error, success color if filled, default color otherwise
         let strokeColor = colors.stroke;
         let fillColor = colors.fill;
-        
+
         if (hasError) {
           strokeColor = '#ef4444';
           fillColor = 'rgba(239, 68, 68, 0.1)';
@@ -160,22 +217,22 @@ function FormFiller() {
           strokeColor = '#10b981';
           fillColor = 'rgba(16, 185, 129, 0.1)';
         }
-        
+
         ctx.strokeStyle = strokeColor;
         ctx.fillStyle = fillColor;
         ctx.lineWidth = 2;
         ctx.setLineDash([]);
-        
+
         ctx.fillRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
         ctx.strokeRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
-        
+
         // Draw filled value or placeholder
         ctx.fillStyle = hasValue ? '#1f2937' : '#6b7280';
         ctx.font = '12px Arial';
-        
+
         let displayText = '';
         const value = formData[field.id];
-        
+
         if (hasValue) {
           if (field.type === 'checkbox' && Array.isArray(value)) {
             displayText = value.join(', ');
@@ -213,22 +270,22 @@ function FormFiller() {
               break;
           }
         }
-        
+
         // Truncate text if too long
         if (displayText.length > 20) {
           displayText = displayText.substring(0, 20) + '...';
         }
-        
+
         const textY = field.coordinates.y + field.coordinates.height / 2 + 5;
         ctx.fillText(displayText, field.coordinates.x + 5, textY);
-        
+
         // Draw required indicator
         if (field.required) {
           ctx.fillStyle = '#ef4444';
           ctx.font = 'bold 12px Arial';
           ctx.fillText('*', field.coordinates.x + field.coordinates.width - 15, field.coordinates.y + 15);
         }
-        
+
         // Draw validation check/error icon
         if (hasError) {
           ctx.fillStyle = '#ef4444';
@@ -244,9 +301,9 @@ function FormFiller() {
   };
 
   const validateForm = () => {
-    const errors = {};
+    const errors: Record<string, string> = {};
     let isValid = true;
-    
+
     if (jsonTemplate) {
       jsonTemplate.fields.forEach(field => {
         if (field.required) {
@@ -256,7 +313,7 @@ function FormFiller() {
             isValid = false;
           }
         }
-        
+
         // Type-specific validation
         if (formData[field.id] && field.type === 'email') {
           const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -265,7 +322,7 @@ function FormFiller() {
             isValid = false;
           }
         }
-        
+
         if (formData[field.id] && field.type === 'number') {
           if (isNaN(formData[field.id]) || formData[field.id] === '') {
             errors[field.id] = 'Please enter a valid number';
@@ -274,20 +331,20 @@ function FormFiller() {
         }
       });
     }
-    
+
     setValidationErrors(errors);
     setIsFormValid(isValid);
     drawFormOverlay();
   };
 
-  const updateFormData = (fieldId, value) => {
+  const updateFormData = (fieldId: string, value: any) => {
     setFormData(prev => ({
       ...prev,
       [fieldId]: value
     }));
   };
 
-  const handleCheckboxChange = (fieldId, option, checked) => {
+  const handleCheckboxChange = (fieldId: string, option: string, checked: boolean) => {
     setFormData(prev => {
       const currentValues = prev[fieldId] || [];
       if (checked) {
@@ -298,13 +355,13 @@ function FormFiller() {
       } else {
         return {
           ...prev,
-          [fieldId]: currentValues.filter(val => val !== option)
+          [fieldId]: currentValues.filter((val: string) => val !== option)
         };
       }
     });
   };
 
-  const handleImageUpload = (fieldId, file) => {
+  const handleImageUpload = (fieldId: string, file: File) => {
     if (file) {
       setImageFiles(prev => ({
         ...prev,
@@ -315,23 +372,23 @@ function FormFiller() {
   };
 
   const generateFilledPDF = async () => {
-    if (!pdfFile || !jsonTemplate || !isFormValid) return;
-    
+    if (!pdfFile || !jsonTemplate || !isFormValid || !window.PDFLib) return;
+
     try {
       // Read the original PDF file
       const arrayBuffer = await pdfFile.arrayBuffer();
-      
+
       // Create PDF document using PDF-lib
       const pdfDoc = await window.PDFLib.PDFDocument.load(arrayBuffer);
       const pages = pdfDoc.getPages();
       const firstPage = pages[0];
-      const { width, height } = firstPage.getSize();
-      
+      const { height } = firstPage.getSize();
+
       // Add form data to PDF
       for (const field of jsonTemplate.fields) {
         if (field.coordinates && formData[field.id]) {
           const value = formData[field.id];
-          
+
           // Convert coordinates from canvas to PDF coordinate system
           // Canvas coordinates are scaled and use top-left origin
           // PDF coordinates use bottom-left origin and are in points
@@ -339,19 +396,19 @@ function FormFiller() {
           const canvasY = field.coordinates.y;
           const canvasWidth = field.coordinates.width;
           const canvasHeight = field.coordinates.height;
-          
+
           // Convert from canvas coordinates to PDF coordinates
           const pdfX = canvasX / pdfScale;
           const pdfY = height - (canvasY / pdfScale) - (canvasHeight / pdfScale);
           const pdfWidth = canvasWidth / pdfScale;
           const pdfHeight = canvasHeight / pdfScale;
-          
+
           if (field.type === 'image' && imageFiles[field.id]) {
             try {
               // Handle image embedding
               const imageFile = imageFiles[field.id];
               const imageArrayBuffer = await imageFile.arrayBuffer();
-              
+
               let image;
               if (imageFile.type === 'image/png') {
                 image = await pdfDoc.embedPng(imageArrayBuffer);
@@ -368,11 +425,11 @@ function FormFiller() {
                 });
                 continue;
               }
-              
+
               // Calculate image dimensions to fit within field
               const imageAspectRatio = image.width / image.height;
               const fieldAspectRatio = pdfWidth / pdfHeight;
-              
+
               let imageWidth, imageHeight;
               if (imageAspectRatio > fieldAspectRatio) {
                 // Image is wider than field
@@ -383,18 +440,18 @@ function FormFiller() {
                 imageHeight = pdfHeight - 10; // Leave some margin
                 imageWidth = imageHeight * imageAspectRatio;
               }
-              
+
               // Center the image in the field
               const imageX = pdfX + (pdfWidth - imageWidth) / 2;
               const imageY = pdfY + (pdfHeight - imageHeight) / 2;
-              
+
               firstPage.drawImage(image, {
                 x: imageX,
                 y: imageY,
                 width: imageWidth,
                 height: imageHeight,
               });
-              
+
             } catch (imageError) {
               console.error('Error embedding image:', imageError);
               // Fallback to text if image embedding fails
@@ -409,25 +466,25 @@ function FormFiller() {
           } else {
             // Handle text fields
             let displayText = '';
-            
+
             if (field.type === 'checkbox' && Array.isArray(value)) {
               displayText = value.join(', ');
             } else {
               displayText = value.toString();
             }
-            
+
             // Add text to PDF
             if (displayText) {
               const fontSize = Math.min(12, pdfHeight / 2);
-              
+
               // Handle multi-line text for textarea
               if (field.type === 'textarea') {
                 const lines = displayText.split('\n');
                 const lineHeight = fontSize * 1.2;
-                
+
                 lines.forEach((line, index) => {
                   const textY = pdfY + pdfHeight - (fontSize / 2) - (index * lineHeight);
-                  if (textY > pdfY) { // Only draw if within field bounds
+                  if (textY > pdfY && window.PDFLib) { // Only draw if within field bounds
                     firstPage.drawText(line, {
                       x: pdfX + 5,
                       y: textY,
@@ -448,61 +505,37 @@ function FormFiller() {
           }
         }
       }
-      
+
       // Add metadata
       pdfDoc.setTitle(`Filled Form - ${jsonTemplate.document?.name || 'Document'}`);
       pdfDoc.setSubject('Filled PDF Form');
       pdfDoc.setCreator('PDF Form Reader');
       pdfDoc.setProducer('PDF Form Reader');
       pdfDoc.setCreationDate(new Date());
-      
+
       // Save the PDF
       const pdfBytes = await pdfDoc.save();
       const blob = new Blob([pdfBytes], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-      
+
       // Download the filled PDF
       const a = document.createElement('a');
       a.href = url;
       a.download = `filled_${pdfFile.name}`;
       a.click();
       URL.revokeObjectURL(url);
-      
+
     } catch (error) {
       console.error('Error generating filled PDF:', error);
       alert('Error generating filled PDF. Please try again.');
     }
   };
 
-  const downloadJSONOnly = () => {
-    if (!jsonTemplate || !isFormValid) return;
-    
-    const filledData = {
-      document: jsonTemplate.document,
-      submissionDate: new Date().toISOString(),
-      data: formData,
-      fields: jsonTemplate.fields.map(field => ({
-        ...field,
-        value: formData[field.id]
-      }))
-    };
-    
-    const jsonBlob = new Blob([JSON.stringify(filledData, null, 2)], { type: 'application/json' });
-    const jsonUrl = URL.createObjectURL(jsonBlob);
-    
-    const a = document.createElement('a');
-    a.href = jsonUrl;
-    a.download = `form_data_${new Date().getTime()}.json`;
-    a.click();
-    URL.revokeObjectURL(jsonUrl);
-  };
-
-  const renderFormField = (field) => {
+  const renderFormField = (field: Field) => {
     const hasError = validationErrors[field.id];
-    const baseClasses = `w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
-      hasError ? 'border-red-500' : 'border-gray-300'
-    }`;
-    
+    const baseClasses = `w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${hasError ? 'border-red-500' : 'border-gray-300'
+      }`;
+
     switch (field.type) {
       case 'text':
         return (
@@ -514,7 +547,7 @@ function FormFiller() {
             placeholder={`Enter ${field.label.toLowerCase()}`}
           />
         );
-      
+
       case 'number':
         return (
           <input
@@ -525,7 +558,7 @@ function FormFiller() {
             placeholder={`Enter ${field.label.toLowerCase()}`}
           />
         );
-      
+
       case 'email':
         return (
           <input
@@ -536,7 +569,7 @@ function FormFiller() {
             placeholder={`Enter ${field.label.toLowerCase()}`}
           />
         );
-      
+
       case 'date':
         return (
           <input
@@ -546,7 +579,7 @@ function FormFiller() {
             className={baseClasses}
           />
         );
-      
+
       case 'select':
         return (
           <select
@@ -555,16 +588,16 @@ function FormFiller() {
             className={baseClasses}
           >
             <option value="">Select {field.label.toLowerCase()}</option>
-            {field.options?.map((option, index) => (
+            {field.options?.map((option: string, index: number) => (
               <option key={index} value={option}>{option}</option>
             ))}
           </select>
         );
-      
+
       case 'checkbox':
         return (
           <div className="space-y-2">
-            {field.options?.map((option, index) => (
+            {field.options?.map((option: string, index: number) => (
               <label key={index} className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -577,7 +610,7 @@ function FormFiller() {
             ))}
           </div>
         );
-      
+
       case 'textarea':
         return (
           <textarea
@@ -585,10 +618,10 @@ function FormFiller() {
             onChange={(e) => updateFormData(field.id, e.target.value)}
             className={`${baseClasses} min-h-[100px] resize-vertical`}
             placeholder={`Enter ${field.label.toLowerCase()}`}
-            rows="4"
+            rows={4}
           />
         );
-      
+
       case 'image':
         return (
           <div>
@@ -596,7 +629,7 @@ function FormFiller() {
               type="file"
               accept="image/*"
               onChange={(e) => {
-                const file = e.target.files[0];
+                const file = e.target.files?.[0];
                 if (file) {
                   handleImageUpload(field.id, file);
                 }
@@ -610,16 +643,16 @@ function FormFiller() {
             )}
             {imageFiles[field.id] && (
               <div className="mt-2">
-                <img 
-                  src={URL.createObjectURL(imageFiles[field.id])} 
-                  alt="Preview" 
+                <img
+                  src={URL.createObjectURL(imageFiles[field.id])}
+                  alt="Preview"
                   className="max-w-full max-h-32 object-contain border rounded"
                 />
               </div>
             )}
           </div>
         );
-      
+
       default:
         return null;
     }
@@ -630,7 +663,7 @@ function FormFiller() {
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
           <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Form Reader</h1>
-          
+
           {/* File Upload Section */}
           <div className="mb-6">
             <div className="flex items-center gap-4 mb-4">
@@ -662,7 +695,7 @@ function FormFiller() {
                 onChange={handleJSONUpload}
                 className="hidden"
               />
-              
+
               {/* Status indicators */}
               <div className="flex items-center gap-4">
                 {pdfFile && (
@@ -752,7 +785,7 @@ function FormFiller() {
                       {isFormValid ? 'Form is valid' : 'Form has errors'}
                     </span>
                   </div>
-                  
+
                   <button
                     onClick={() => setShowPreview(!showPreview)}
                     className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors"
@@ -760,7 +793,7 @@ function FormFiller() {
                     <Eye size={20} />
                     {showPreview ? 'Hide' : 'Show'} Form Data
                   </button>
-                  
+
                   <button
                     onClick={generateFilledPDF}
                     disabled={!isFormValid}
