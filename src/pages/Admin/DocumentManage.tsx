@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Upload, Plus, Trash2, Save, Eye, Settings, List, Move } from 'lucide-react';
+import { Download, Upload, Plus, Trash2, Save, Eye, Settings, List, Move, Edit, X } from 'lucide-react';
 
 function DocumentManage() {
   const [pdfFile, setPdfFile] = useState(null);
@@ -18,6 +18,15 @@ function DocumentManage() {
       minItems: 1,
       maxItems: 10,
       columns: []
+    },
+    tableConfig: {
+      rows: 1,
+      columns: [],
+      data: []
+    },
+    style: {
+      fontSize: '12',
+      color: '#000000'
     }
   });
   const [jsonTemplate, setJsonTemplate] = useState('');
@@ -26,6 +35,9 @@ function DocumentManage() {
   const [startPoint, setStartPoint] = useState({ x: 0, y: 0 });
   const [currentRect, setCurrentRect] = useState(null);
   const [drawingMode, setDrawingMode] = useState(false);
+  const [editingField, setEditingField] = useState(null);
+  const [showPreviewMode, setShowPreviewMode] = useState(false);
+  const [previewValues, setPreviewValues] = useState({});
   const canvasRef = useRef(null);
   const overlayCanvasRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -144,6 +156,11 @@ function DocumentManage() {
           minItems: 1,
           maxItems: 10,
           columns: []
+        },
+        tableConfig: {
+          rows: 1,
+          columns: [],
+          data: []
         }
       });
       setShowFieldModal(true);
@@ -164,7 +181,8 @@ function DocumentManage() {
       checkbox: { stroke: '#84cc16', fill: 'rgba(132, 204, 22, 0.1)' },
       textarea: { stroke: '#64748b', fill: 'rgba(100, 116, 139, 0.1)' },
       image: { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.1)' },
-      list: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.1)' }
+      list: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.1)' },
+      table: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' }
     };
     return colors[fieldType] || colors.text;
   };
@@ -184,73 +202,246 @@ function DocumentManage() {
     // Draw existing fields
     fields.forEach(field => {
       if (field.coordinates) {
-        const colors = getFieldColor(field.type);
-        ctx.strokeStyle = colors.stroke;
-        ctx.fillStyle = colors.fill;
-        ctx.lineWidth = 2;
-        ctx.setLineDash([]);
-        
-        ctx.fillRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
-        ctx.strokeRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
-        
-        // Draw field type icon/indicator
-        ctx.fillStyle = colors.stroke;
-        ctx.font = 'bold 10px Arial';
-        const typeIndicator = field.type.toUpperCase();
-        ctx.fillText(typeIndicator, field.coordinates.x + 5, field.coordinates.y + 15);
-        
-        // Draw field label
-        ctx.fillStyle = '#1f2937';
+        if (!showPreviewMode) {
+          // Only draw field highlights in edit mode
+          const colors = getFieldColor(field.type);
+          ctx.strokeStyle = colors.stroke;
+          ctx.fillStyle = colors.fill;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          
+          ctx.fillRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
+          ctx.strokeRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
+          
+          // Draw field type indicator and label in edit mode
+          ctx.fillStyle = colors.stroke;
+          ctx.font = 'bold 10px Arial';
+          const typeIndicator = field.type.toUpperCase();
+          ctx.fillText(typeIndicator, field.coordinates.x + 5, field.coordinates.y + 15);
+          
+          ctx.fillStyle = '#1f2937';
+          ctx.font = '12px Arial';
+          const labelY = field.coordinates.y - 5;
+          ctx.fillText(field.label, field.coordinates.x + 5, labelY);
+        }
+
+        // Draw field values
+        ctx.fillStyle = '#000000';
         ctx.font = '12px Arial';
-        const labelY = field.coordinates.y - 5;
-        ctx.fillText(field.label, field.coordinates.x + 5, labelY);
-        
-        // Draw field placeholder/preview content
-        ctx.fillStyle = '#6b7280';
-        ctx.font = '10px Arial';
-        let previewText = '';
         
         switch (field.type) {
           case 'text':
-            previewText = 'Enter text...';
-            break;
-          case 'number':
-            previewText = '123';
-            break;
           case 'email':
-            previewText = 'user@example.com';
+          case 'number':
+            const value = previewValues[field.id] || '';
+            ctx.fillStyle = field.style?.color || '#000000';
+            ctx.font = `${field.style?.fontSize || '12'}px Arial`;
+            ctx.fillText(value, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
             break;
+
           case 'date':
-            previewText = 'MM/DD/YYYY';
+            const dateValue = previewValues[field.id] ? new Date(previewValues[field.id]).toLocaleDateString() : '';
+            ctx.fillText(dateValue, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
             break;
+
           case 'select':
-            previewText = field.options.length > 0 ? `▼ ${field.options[0]}` : '▼ Select...';
+            const selectValue = previewValues[field.id] || '';
+            ctx.fillText(selectValue, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
             break;
+
           case 'checkbox':
-            previewText = '☐ Check options';
-            break;
-          case 'textarea':
-            previewText = 'Enter long text...';
-            break;
-          case 'image':
-            previewText = '🖼️ Image upload';
-            break;
-          case 'list':
-            if (field.listConfig.columns.length > 0) {
-              previewText = `📋 ${field.listConfig.columns.map(col => col.label).join(' | ')}`;
-            } else {
-              previewText = '📋 Dynamic list';
+            const isChecked = previewValues[field.id];
+            ctx.fillStyle = field.style?.color || '#000000';
+            
+            // Draw checkbox outline with smaller size
+            ctx.strokeStyle = field.style?.color || '#000000';
+            ctx.lineWidth = 1;
+            const boxSize = Math.min(parseInt(field.style?.fontSize || '12'), field.coordinates.height - 4);
+            const x = field.coordinates.x + 2;
+            const y = field.coordinates.y + (field.coordinates.height / 2) - (boxSize / 2);
+            
+            ctx.strokeRect(x, y, boxSize, boxSize);
+            
+            if (isChecked) {
+              // Fill checkbox with solid color when checked
+              ctx.fillStyle = field.style?.color || '#000000';
+              ctx.fillRect(x + 1, y + 1, boxSize - 2, boxSize - 2);
             }
             break;
+
+          case 'textarea':
+            const textareaValue = previewValues[field.id] || '';
+            const fontSize = parseInt(field.style?.fontSize || '12');
+            const lineHeight = fontSize + 4;
+            const maxLines = Math.floor(field.coordinates.height / lineHeight);
+            
+            ctx.fillStyle = field.style?.color || '#000000';
+            ctx.font = `${fontSize}px Arial`;
+            
+            // Word wrapping function
+            const wrapText = (text, maxWidth) => {
+              const words = text.split(' ');
+              const lines = [];
+              let currentLine = words[0];
+
+              for (let i = 1; i < words.length; i++) {
+                const word = words[i];
+                const width = ctx.measureText(currentLine + ' ' + word).width;
+                if (width < maxWidth - 10) {
+                  currentLine += ' ' + word;
+                } else {
+                  lines.push(currentLine);
+                  currentLine = word;
+                }
+              }
+              lines.push(currentLine);
+              return lines;
+            };
+
+            // Handle multiple paragraphs
+            const paragraphs = textareaValue.split('\n');
+            let currentY = field.coordinates.y + lineHeight;
+            let lineCount = 0;
+
+            for (const paragraph of paragraphs) {
+              if (lineCount >= maxLines) break;
+              
+              const wrappedLines = wrapText(paragraph, field.coordinates.width);
+              for (const line of wrappedLines) {
+                if (lineCount >= maxLines) break;
+                
+                ctx.fillText(
+                  line,
+                  field.coordinates.x + 5,
+                  currentY
+                );
+                
+                currentY += lineHeight;
+                lineCount++;
+              }
+            }
+            break;
+
+          case 'image':
+            const imageData = previewValues[field.id];
+            if (imageData) {
+              const img = new Image();
+              img.src = imageData;
+              img.onload = () => {
+                // Calculate scaling to fit within field bounds while maintaining aspect ratio
+                const scale = Math.min(
+                  field.coordinates.width / img.width,
+                  field.coordinates.height / img.height
+                );
+                const width = img.width * scale;
+                const height = img.height * scale;
+                const x = field.coordinates.x + (field.coordinates.width - width) / 2;
+                const y = field.coordinates.y + (field.coordinates.height - height) / 2;
+                
+                ctx.drawImage(img, x, y, width, height);
+              };
+            } else {
+              // Draw placeholder
+              ctx.strokeStyle = '#CBD5E1';
+              ctx.strokeRect(
+                field.coordinates.x,
+                field.coordinates.y,
+                field.coordinates.width,
+                field.coordinates.height
+              );
+              ctx.fillStyle = '#94A3B8';
+              ctx.font = '12px Arial';
+              ctx.textAlign = 'center';
+              ctx.fillText(
+                'No image uploaded',
+                field.coordinates.x + field.coordinates.width / 2,
+                field.coordinates.y + field.coordinates.height / 2
+              );
+              ctx.textAlign = 'left';
+            }
+            break;
+
+          case 'table':
+            const cellHeight = 25;
+            let maxY = field.coordinates.y;
+            let hasContent = false;
+            let lastContentY = field.coordinates.y;
+            
+            let currentX = field.coordinates.x;
+            field.tableConfig.columns.forEach((col, colIndex) => {
+              const colWidth = col.width || field.coordinates.width / field.tableConfig.columns.length;
+              
+              for (let row = 0; row < field.tableConfig.rows; row++) {
+                const cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+                if (cellValue) {
+                  hasContent = true;
+                  ctx.fillStyle = field.style?.color || '#000000';
+                  ctx.font = `${field.style?.fontSize || '11'}px Arial`;
+                  ctx.textAlign = 'center';
+                  
+                  const cellCenterX = currentX + (colWidth / 2);
+                  const cellCenterY = field.coordinates.y + (row * cellHeight) + (cellHeight / 2);
+                  
+                  // Adjust text position higher in the cell
+                  ctx.fillText(cellValue, cellCenterX, cellCenterY);
+                  lastContentY = Math.max(lastContentY, cellCenterY + (cellHeight/2));
+                }
+              }
+              currentX += colWidth;
+            });
+            
+            // Draw grid lines in edit mode
+            if (!showPreviewMode) {
+              // Vertical lines
+              currentX = field.coordinates.x;
+              field.tableConfig.columns.forEach((col) => {
+                const colWidth = col.width || field.coordinates.width / field.tableConfig.columns.length;
+                ctx.beginPath();
+                ctx.moveTo(currentX, field.coordinates.y);
+                ctx.lineTo(currentX, field.coordinates.y + (cellHeight * field.tableConfig.rows));
+                ctx.stroke();
+                currentX += colWidth;
+              });
+              
+              // Final vertical line
+              ctx.beginPath();
+              ctx.moveTo(currentX, field.coordinates.y);
+              ctx.lineTo(currentX, field.coordinates.y + (cellHeight * field.tableConfig.rows));
+              ctx.stroke();
+              
+              // Horizontal lines
+              for (let i = 0; i <= field.tableConfig.rows; i++) {
+                ctx.beginPath();
+                ctx.moveTo(field.coordinates.x, field.coordinates.y + (i * cellHeight));
+                ctx.lineTo(field.coordinates.x + field.coordinates.width, field.coordinates.y + (i * cellHeight));
+                ctx.stroke();
+              }
+            }
+            
+            // Draw "nothing follows" text immediately after the last content
+            if (hasContent) {
+              const footerY = lastContentY + 5; // Reduced spacing
+              ctx.font = '11px Arial';
+              ctx.fillStyle = '#666666';
+              ctx.textBaseline = 'middle';
+              ctx.textAlign = 'center';
+              
+              // Draw centered footer text without the line
+              ctx.fillText(
+                'xxx nothing follows xxx',
+                field.coordinates.x + (field.coordinates.width / 2),
+                footerY
+              );
+            }
+            
+            // Reset text alignment
+            ctx.textAlign = 'left';
+            ctx.textBaseline = 'alphabetic';
+            break;
         }
         
-        if (previewText) {
-          const textY = field.coordinates.y + field.coordinates.height - 10;
-          ctx.fillText(previewText, field.coordinates.x + 5, textY);
-        }
-        
-        // Draw required indicator
-        if (field.required) {
+        // Draw required indicator only in edit mode
+        if (!showPreviewMode && field.required) {
           ctx.fillStyle = '#ef4444';
           ctx.font = 'bold 12px Arial';
           ctx.fillText('*', field.coordinates.x + field.coordinates.width - 15, field.coordinates.y + 15);
@@ -258,8 +449,8 @@ function DocumentManage() {
       }
     });
     
-    // Draw current rectangle being drawn
-    if (currentRect && isDrawing) {
+    // Draw current rectangle being drawn (only in edit mode)
+    if (!showPreviewMode && currentRect && isDrawing) {
       ctx.strokeStyle = '#ef4444';
       ctx.fillStyle = 'rgba(239, 68, 68, 0.1)';
       ctx.lineWidth = 2;
@@ -268,7 +459,6 @@ function DocumentManage() {
       ctx.fillRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       ctx.strokeRect(currentRect.x, currentRect.y, currentRect.width, currentRect.height);
       
-      // Show dimensions while drawing
       ctx.fillStyle = '#ef4444';
       ctx.font = '10px Arial';
       ctx.setLineDash([]);
@@ -278,7 +468,12 @@ function DocumentManage() {
   };
 
   const addField = () => {
-    setFields([...fields, { ...currentField }]);
+    if (editingField) {
+      setFields(fields.map(f => f.id === editingField.id ? currentField : f));
+      setEditingField(null);
+    } else {
+      setFields([...fields, { ...currentField }]);
+    }
     setShowFieldModal(false);
     setCurrentField({
       id: '',
@@ -292,6 +487,15 @@ function DocumentManage() {
         minItems: 1,
         maxItems: 10,
         columns: []
+      },
+      tableConfig: {
+        rows: 1,
+        columns: [],
+        data: []
+      },
+      style: {
+        fontSize: '12',
+        color: '#000000'
       }
     });
     drawOverlay();
@@ -314,20 +518,43 @@ function DocumentManage() {
         label: field.label,
         type: field.type,
         required: field.required,
-        ...(field.options.length > 0 && { options: field.options }),
-        ...(field.type === 'list' && { listConfig: field.listConfig }),
+        ...(field.type === 'select' && { options: field.options }),
+        ...(field.type === 'checkbox' && { value: false }),
+        ...(field.type === 'table' && { 
+          tableConfig: {
+            rows: field.tableConfig.rows,
+            expandable: true, // Allow adding more rows
+            columns: field.tableConfig.columns.map(col => ({
+              label: col.label,
+              width: col.width,
+              type: col.type || 'text'
+            })),
+            data: Array(field.tableConfig.rows).fill(
+              Array(field.tableConfig.columns.length).fill('')
+            )
+          }
+        }),
         coordinates: field.coordinates,
-        page: field.page
+        page: field.page,
+        style: field.style || {
+          fontSize: '12',
+          color: '#000000'
+        }
       })),
       schema: fields.reduce((acc, field) => {
         acc[field.id] = {
           type: field.type,
           required: field.required,
           label: field.label,
-          ...(field.type === 'list' && { listConfig: field.listConfig })
+          ...(field.type === 'table' && { tableConfig: field.tableConfig })
         };
         return acc;
-      }, {})
+      }, {}),
+      _metadata: {
+        generated: new Date().toISOString(),
+        version: "1.0.0"
+      },
+      _footer: "xxx nothing follows xxx"
     };
     
     const jsonString = JSON.stringify(template, null, 2);
@@ -422,6 +649,219 @@ function DocumentManage() {
     }
   };
 
+  const editField = (field) => {
+    setEditingField(field);
+    setCurrentField(field);
+    setShowFieldModal(true);
+  };
+
+  const renderFieldPreview = (field) => {
+    switch (field.type) {
+      case 'text':
+        return (
+          <input
+            type="text"
+            className="w-full p-2 border rounded"
+            placeholder={`Enter ${field.label.toLowerCase()}`}
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          />
+        );
+      case 'number':
+        return (
+          <input
+            type="number"
+            className="w-full p-2 border rounded"
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          />
+        );
+      case 'email':
+        return (
+          <input
+            type="email"
+            className="w-full p-2 border rounded"
+            placeholder="user@example.com"
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          />
+        );
+      case 'date':
+        return (
+          <input
+            type="date"
+            className="w-full p-2 border rounded"
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          />
+        );
+      case 'select':
+        return (
+          <select
+            className="w-full p-2 border rounded"
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          >
+            <option value="">Select...</option>
+            {field.options.map((opt, i) => (
+              <option key={i} value={opt}>{opt}</option>
+            ))}
+          </select>
+        );
+      case 'checkbox':
+        return (
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={previewValues[field.id] || false}
+              onChange={(e) => setPreviewValues({
+                ...previewValues,
+                [field.id]: e.target.checked
+              })}
+              className="w-4 h-4"
+            />
+            <span className="text-sm text-gray-600">Yes/No</span>
+          </div>
+        );
+      case 'textarea':
+        return (
+          <textarea
+            className="w-full p-2 border rounded"
+            rows={3}
+            placeholder={`Enter ${field.label.toLowerCase()}`}
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+          />
+        );
+      case 'table':
+        return (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <tbody>
+                {Array(field.tableConfig.rows).fill(0).map((_, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {field.tableConfig.columns.map((col, colIndex) => (
+                      <td key={colIndex} className="p-2 border">
+                        <input
+                          type="text"
+                          className="w-full p-1 border rounded text-center"
+                          value={previewValues[`${field.id}_${rowIndex}_${colIndex}`] || ''}
+                          onChange={(e) => setPreviewValues({
+                            ...previewValues,
+                            [`${field.id}_${rowIndex}_${colIndex}`]: e.target.value
+                          })}
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <button
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+              onClick={() => {
+                const newField = {...field};
+                newField.tableConfig.rows += 1;
+                setFields(fields.map(f => f.id === field.id ? newField : f));
+              }}
+            >
+              <Plus size={16} className="inline mr-1" />
+              Add Row
+            </button>
+          </div>
+        );
+      case 'image':
+        return (
+          <div className="space-y-2">
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  const reader = new FileReader();
+                  reader.onload = (event) => {
+                    setPreviewValues({
+                      ...previewValues,
+                      [field.id]: event.target?.result
+                    });
+                  };
+                  reader.readAsDataURL(file);
+                }
+              }}
+              className="hidden"
+              id={`image-upload-${field.id}`}
+            />
+            <div className="border rounded p-4 text-center">
+              {previewValues[field.id] ? (
+                <div className="relative group">
+                  <img
+                    src={previewValues[field.id]}
+                    alt="Preview"
+                    className="max-h-32 mx-auto"
+                  />
+                  <button
+                    onClick={() => setPreviewValues({
+                      ...previewValues,
+                      [field.id]: null
+                    })}
+                    className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ) : (
+                <label
+                  htmlFor={`image-upload-${field.id}`}
+                  className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                >
+                  <Upload size={24} />
+                  <span className="text-sm mt-1">Upload Image</span>
+                </label>
+              )}
+            </div>
+          </div>
+        );
+      default:
+        return <div className="text-sm text-gray-500">Preview not available</div>;
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.ctrlKey) {
+        if (e.key === 'a') {
+          e.preventDefault();
+          setDrawingMode(true);
+        } else if (e.key === 'q') {
+          e.preventDefault();
+          setShowPreviewMode(!showPreviewMode);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [showPreviewMode]);
+
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
@@ -439,12 +879,62 @@ function DocumentManage() {
                 Upload PDF
               </button>
               <button
+                onClick={() => {
+                  const input = document.createElement('input');
+                  input.type = 'file';
+                  input.accept = '.json';
+                  input.onchange = (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = (event) => {
+                        try {
+                          const template = JSON.parse(event.target.result);
+                          setFields(template.fields.map(field => ({
+                            ...field,
+                            tableConfig: field.tableConfig || {
+                              rows: 1,
+                              columns: [],
+                              data: []
+                            },
+                            listConfig: {
+                              minItems: 1,
+                              maxItems: 10,
+                              columns: []
+                            }
+                          })));
+                          if (template.values) {
+                            setPreviewValues(template.values);
+                          }
+                        } catch (error) {
+                          console.error('Error parsing JSON template:', error);
+                          alert('Invalid JSON template file');
+                        }
+                      };
+                      reader.readAsText(file);
+                    }
+                  };
+                  input.click();
+                }}
+                className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                <Upload size={20} />
+                Import Template
+              </button>
+              <button
                 onClick={() => setDrawingMode(true)}
                 disabled={!pdfUrl}
                 className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 <Plus size={20} />
                 Add Field
+              </button>
+              <button
+                onClick={() => setShowPreviewMode(!showPreviewMode)}
+                className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm"
+              >
+                <Eye size={16} />
+                {showPreviewMode ? 'Edit Mode' : 'Preview Mode'}
               </button>
               <input
                 ref={fileInputRef}
@@ -539,6 +1029,10 @@ function DocumentManage() {
                           <span className="w-3 h-3 rounded-sm border-2 border-orange-500 bg-orange-100"></span>
                           List
                         </div>
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-sm border-2 border-indigo-500 bg-indigo-100"></span>
+                          Table
+                        </div>
                       </div>
                       <div className="mt-2 text-xs text-gray-500">
                         * = Required field
@@ -558,36 +1052,58 @@ function DocumentManage() {
               {/* Fields List */}
               <div className="border rounded-lg p-4">
                 <h3 className="text-lg font-semibold mb-4">Form Fields ({fields.length})</h3>
-                <div className="space-y-2 max-h-60 overflow-y-auto">
-                  {fields.map((field) => (
-                    <div key={field.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <div className="flex-1">
-                        <div className="font-medium text-sm flex items-center gap-2">
-                          <span 
-                            className="w-3 h-3 rounded-sm border-2"
-                            style={{ 
-                              borderColor: getFieldColor(field.type).stroke,
-                              backgroundColor: getFieldColor(field.type).fill
-                            }}
-                          ></span>
+                {fields.map(field => (
+                  <div key={field.id} className="mb-4 hover:bg-slate-400/10 p-3 rounded-sm cursor-pointer last:mb-0">
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex items-center gap-2">
+                        <span 
+                          className="w-3 h-3 rounded-sm border-2"
+                          style={{ 
+                            borderColor: getFieldColor(field.type).stroke,
+                            backgroundColor: getFieldColor(field.type).fill
+                          }}
+                        />
+                        <span className="font-medium text-sm">
                           {field.label}
-                        </div>
-                        <div className="text-xs text-gray-500">
-                          {field.type} {field.required && '(required)'}
-                          {field.type === 'list' && ` - ${field.listConfig.columns.length} columns`}
-                        </div>
+                          {field.required && <span className="text-red-500 ml-1">*</span>}
+                        </span>
                       </div>
-                      <button
-                        onClick={() => removeField(field.id)}
-                        className="text-red-600 hover:text-red-800"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      {!showPreviewMode && (
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => editField(field)}
+                            className="text-blue-600 hover:text-blue-800"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            onClick={() => removeField(field.id)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                    {showPreviewMode ? (
+                      <div className="mt-1">
+                        {renderFieldPreview(field)}
+                      </div>
+                    ) : (
+                      <div className="text-xs text-gray-500">
+                        {field.type}
+                        {field.type === 'table' && ` (${field.tableConfig.columns.length} columns)`}
+                      </div>
+                    )}
+                  </div>
+                ))}
+                {fields.length === 0 && (
+                  <div className="text-center text-gray-500 py-4">
+                    No fields added yet. Click "Add Field" to start.
+                  </div>
+                )}
               </div>
-
+              
               {/* Actions */}
               <div className="space-y-3">
                 <button
@@ -636,7 +1152,15 @@ function DocumentManage() {
       {showFieldModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-            <h3 className="text-lg font-semibold mb-4">Create Form Field</h3>
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Create Form Field</h3>
+              <button
+                onClick={() => setShowFieldModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
             
             <div className="space-y-4">
               <div>
@@ -678,9 +1202,10 @@ function DocumentManage() {
                   <option value="email">Email</option>
                   <option value="date">Date</option>
                   <option value="select">Select</option>
-                  <option value="checkbox">Checkbox</option>
+                  <option value="checkbox">Checkbox (Yes/No)</option>
                   <option value="textarea">Textarea</option>
                   <option value="image">Image</option>
+                  <option value="table">Table</option>
                 </select>
               </div>
               
@@ -718,6 +1243,119 @@ function DocumentManage() {
                 </div>
               )}
               
+              {currentField.type === 'table' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Table Configuration
+                  </label>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs text-gray-600">Initial Number of Rows</label>
+                      <div className="text-xs text-gray-500 mb-1">
+                        (Can be extended when filling the form)
+                      </div>
+                      <input
+                        type="number"
+                        min="1"
+                        value={currentField.tableConfig.rows}
+                        onChange={(e) => setCurrentField({
+                          ...currentField,
+                          tableConfig: {
+                            ...currentField.tableConfig,
+                            rows: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-600">Columns</label>
+                      <div className="space-y-2">
+                        {currentField.tableConfig.columns.map((column, index) => (
+                          <div key={index} className="flex gap-2">
+                            <input
+                              type="text"
+                              value={column.label}
+                              onChange={(e) => {
+                                const newColumns = [...currentField.tableConfig.columns];
+                                newColumns[index] = { 
+                                  ...column, 
+                                  label: e.target.value 
+                                };
+                                setCurrentField({
+                                  ...currentField,
+                                  tableConfig: {
+                                    ...currentField.tableConfig,
+                                    columns: newColumns
+                                  }
+                                });
+                              }}
+                              className="flex-1 p-2 border rounded-lg"
+                              placeholder={`Column ${index + 1} header`}
+                            />
+                            <input
+                              type="number"
+                              min="50"
+                              value={column.width}
+                              onChange={(e) => {
+                                const newColumns = [...currentField.tableConfig.columns];
+                                newColumns[index] = { 
+                                  ...column, 
+                                  width: parseInt(e.target.value) || 100 
+                                };
+                                setCurrentField({
+                                  ...currentField,
+                                  tableConfig: {
+                                    ...currentField.tableConfig,
+                                    columns: newColumns
+                                  }
+                                });
+                              }}
+                              className="w-24 p-2 border rounded-lg"
+                              placeholder="Width"
+                            />
+                            <button
+                              onClick={() => {
+                                const newColumns = currentField.tableConfig.columns.filter((_, i) => i !== index);
+                                setCurrentField({
+                                  ...currentField,
+                                  tableConfig: {
+                                    ...currentField.tableConfig,
+                                    columns: newColumns
+                                  }
+                                });
+                              }}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => {
+                            setCurrentField({
+                              ...currentField,
+                              tableConfig: {
+                                ...currentField.tableConfig,
+                                columns: [...currentField.tableConfig.columns, { 
+                                  label: '', 
+                                  width: 100,
+                                  type: 'text'
+                                }]
+                              }
+                            });
+                          }}
+                          className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
+                        >
+                          <Plus size={16} />
+                          Add Column
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               <div className="flex items-center">
                 <input
                   type="checkbox"
@@ -729,6 +1367,49 @@ function DocumentManage() {
                 <label htmlFor="required" className="text-sm font-medium text-gray-700">
                   Required field
                 </label>
+              </div>
+
+              {/* Style Settings */}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Font Size
+                    </label>
+                    <input
+                      type="number"
+                      min="8"
+                      max="72"
+                      value={currentField.style?.fontSize || '12'}
+                      onChange={(e) => setCurrentField({
+                        ...currentField,
+                        style: {
+                          ...currentField.style,
+                          fontSize: e.target.value
+                        }
+                      })}
+                      className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Text Color
+                    </label>
+                    <input
+                      type="color"
+                      value={currentField.style?.color || '#000000'}
+                      onChange={(e) => setCurrentField({
+                        ...currentField,
+                        style: {
+                          ...currentField.style,
+                          color: e.target.value
+                        }
+                      })}
+                      className="w-full p-1 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-[42px]"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
             
