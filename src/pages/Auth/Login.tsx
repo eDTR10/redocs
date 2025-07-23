@@ -28,26 +28,26 @@ function Login() {
 
   return (
     <ThemeProvider defaultTheme="light" storageKey="vite-ui-theme">
-      
+
       <div className="flex h-screen items-center justify-center bg-background flex-col">
-       <img src={R10bg} className=" opacity-10 w-screen h-screen object-cover absolute z-0 " alt="" />
-<p className=" text-xs fixed z-20 bottom-0 mb-10">Developed by: DICT Region 10
-            </p>
-     
-       
+        <img src={R10bg} className=" opacity-10 w-screen h-screen object-cover absolute z-0 " alt="" />
+        <p className=" text-xs fixed z-20 bottom-0 mb-10">Developed by: DICT Region 10
+        </p>
+
+
         <div className=" z-10 w-[30vw] sm:w-[90%] bg-background border rounded-sm border-border  lg:w-1/2 flex flex-col items-center justify-center p-8 sm:p-5">
-      
+
           <div className="w-full max-w-md ">
             <div className=" fixed top-0 right-0 p-4">
               <ModeToggle />
             </div>
 
-            
-            
+
+
 
 
             <div className="flex mb-3 justify-between items-center gap-2 text-center">
-      
+
               <h1 className="text-4xl font-bold text-primary"> Sign In</h1>
               <img className=" h-12 object-contain" src={eDoc} alt="" />
 
@@ -72,18 +72,29 @@ function Login() {
 
               axios.post('token/login/', data).then((e) => {
 
-               
-                  const token = e.data.auth_token;
-                  localStorage.setItem('accessToken', token);
+
+                const token = e.data.auth_token;
+                localStorage.setItem('accessToken', token);
                 axios.get('users/me/', {
                   headers: {
                     Authorization: `Token ${token}`,
                   },
                 }).then((response) => {
+                  console.log(response.data)
+                  localStorage.setItem('accessLevel', response.data.acc_lvl);
                   setIsLoading(false)
                   setData({
                     email: "", password: ""
                   })
+
+
+                  if (response.data.access_level === 0 || response.data.access_level === 3) {
+
+                    navigate('/redocs/admin')
+                  } else {
+
+                    navigate('/redocs/user')
+                  }
 
                   Swal.fire({
                     icon: 'success',
@@ -92,11 +103,7 @@ function Login() {
                     showConfirmButton: false,
                     timer: 1500,
                   })
-                  navigate('/redocs/admin')
 
-
-
-                  // Add your navigation logic here
                 })
 
 
@@ -213,7 +220,7 @@ function Login() {
           </div>
         </div>
 
-        
+
       </div>
     </ThemeProvider>
   )

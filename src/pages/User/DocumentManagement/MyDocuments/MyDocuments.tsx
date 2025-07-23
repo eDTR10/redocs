@@ -350,8 +350,9 @@ const MyDocuments = () => {
                                                 </button>
                                                 <button
                                                     onClick={() => handleEditDocument(doc)}
-                                                    className="text-green-600 hover:text-green-900 p-1 rounded"
+                                                    className={`text-green-600 hover:text-green-900 p-1 rounded ${doc.status === 3 ? 'opacity-50 cursor-not-allowed' : ''}`}
                                                     title="Edit"
+                                                    disabled={doc.status === 3}
                                                 >
                                                     <Edit className="w-4 h-4" />
                                                 </button>

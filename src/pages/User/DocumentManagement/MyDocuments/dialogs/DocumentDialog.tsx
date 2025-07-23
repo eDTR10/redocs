@@ -64,11 +64,13 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
     useEffect(() => {
         if (document) {
             setEditedDocument({ ...document });
-            setIsEditing(mode === 'edit');
+            // Only allow editing if status is not 3 (Completed)
+            setIsEditing(mode === 'edit' && document.status !== 3);
         }
     }, [document, mode]);
 
     if (!isOpen || !document || !editedDocument) return null;
+    const isCompleted = editedDocument.status === 3;
 
     const handleSave = async () => {
         if (!editedDocument) return;
@@ -206,7 +208,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                         </div>
                     </div>
                     <div className="flex items-center space-x-2">
-                        {!isEditing && mode === 'view' && (
+                        {!isEditing && mode === 'view' && !isCompleted && (
                             <button
                                 onClick={() => setIsEditing(true)}
                                 className="inline-flex items-center px-3 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
@@ -535,7 +537,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                 {/* Footer */}
                 <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 flex-shrink-0">
                     {/* Approve button at the far left */}
-                    {isEditing ? (
+                    {isEditing && !isCompleted ? (
                         <button
                             className="px-4 py-2 border border-blue-500 text-blue-700 bg-white rounded-md text-sm font-medium hover:bg-blue-50 mr-4"
                             onClick={async () => {
