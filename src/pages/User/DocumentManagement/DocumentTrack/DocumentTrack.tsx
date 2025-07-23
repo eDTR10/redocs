@@ -1,16 +1,15 @@
 import { useState, useEffect } from 'react';
 import { MapPin, Clock, CheckCircle, XCircle, AlertCircle, FileText, Search, Filter } from 'lucide-react';
-import { DocumentTrack as DocumentTrackType } from '../../../../interfaces/Document';
 
 const DocumentTrack = () => {
-    const [documents, setDocuments] = useState<DocumentTrackType[]>([]);
-    const [selectedDocument, setSelectedDocument] = useState<DocumentTrackType | null>(null);
+    const [documents, setDocuments] = useState<any[]>([]);
+    const [selectedDocument, setSelectedDocument] = useState<any | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [filterStatus, setFilterStatus] = useState('');
 
     useEffect(() => {
         // Sample tracking data
-        const sampleDocuments: DocumentTrackType[] = [
+        const sampleDocuments: any[] = [
             {
                 id: '1',
                 name: 'Office Supplies Request',

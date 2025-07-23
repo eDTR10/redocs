@@ -6,8 +6,8 @@ import { FilledDocument } from '@/interfaces/Document';
 
 
 // Get all documents (with optional query params for filtering, pagination, etc.)
-export const fetchDocuments = async (params?: Record<string, any>): Promise<FilledDocument[]> => {
-  const response = await axios.get<FilledDocument[]>('document/all/', { params });
+export const fetchDocuments = async (params?: Record<string, any>, config?: Record<string, any> ): Promise<FilledDocument[]> => {
+  const response = await axios.get<FilledDocument[]>('document/all/', { params, ...config, });
   return response.data;
 };
 
@@ -28,7 +28,17 @@ export const createDocument = async (data: FilledDocument): Promise<FilledDocume
 
 // Update an existing document by ID
 export const updateDocument = async (id: string, data: Partial<FilledDocument>): Promise<FilledDocument> => {
-  const response = await axios.put<FilledDocument>(`document/all/${id}/`, data);
+  const token = localStorage.getItem('accessToken');
+  const response = await axios.put<FilledDocument>(
+    `document/${id}/`,
+    data,
+    {
+      headers: {
+        Authorization: `Token ${token}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
   return response.data;
 };
 

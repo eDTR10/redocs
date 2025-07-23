@@ -18,11 +18,15 @@ function wait(time: number) {
 // ));
 
 const AdminPerRole = lazy(() => 
-  wait(1300).then(() => import("./components/adminPerRole/Cards.tsx")
+  wait(1300).then(() => import("./components/adminPerRole/dashboard/Cards.tsx")
+));
+
+const Tracking = lazy(() => 
+  wait(1300).then(() => import("./components/adminPerRole/tracking/Tracking.tsx")
 ));
 
 const AdminDocument = lazy(() => 
-  wait(1300).then(() => import("./components/adminPerRole/Document.tsx")
+  wait(1300).then(() => import("./components/adminPerRole/documents/Document.tsx")
 ));
 
 const Dashboard = lazy(() => 
@@ -197,6 +201,14 @@ const router = createBrowserRouter([
         element: (
           <Suspense fallback={<Loader />}>
             <AdminDocument />
+          </Suspense>
+        ),
+      },
+      {
+        path: "tracking",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <Tracking />
           </Suspense>
         ),
       },
