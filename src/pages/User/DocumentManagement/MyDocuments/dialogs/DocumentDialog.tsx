@@ -94,7 +94,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                 return { ...a, sign_img: foundUrl || a.sign_img };
             })
         );
-        const updatedDoc = { ...editedDocument, assignatures: updatedAssignatures };
+        const updatedDoc = { ...editedDocument, assignatures: updatedAssignatures, status: 3 };
         if (onSave) onSave(updatedDoc);
         setIsEditing(false);
     };
