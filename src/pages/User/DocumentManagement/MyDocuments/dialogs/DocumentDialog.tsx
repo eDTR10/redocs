@@ -94,7 +94,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                 return { ...a, sign_img: foundUrl || a.sign_img };
             })
         );
-        const updatedDoc = { ...editedDocument, assignatures: updatedAssignatures, status: 3 };
+        const updatedDoc = { ...editedDocument, assignatures: updatedAssignatures, status: 2 };
         if (onSave) onSave(updatedDoc);
         setIsEditing(false);
     };
@@ -111,7 +111,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
     // Use the same statusMap as in MyDocuments for color and label
     const localStatusMap: Record<string | number, { label: string; color: string; icon: JSX.Element }> = {
         1: { label: 'Submitted', color: 'bg-blue-100 text-blue-800', icon: <Clock className="w-5 h-5 text-blue-600" /> },
-        2: { label: 'In-Route', color: 'bg-green-100 text-green-700', icon: <Clock className="w-5 h-5 text-green-700" /> },
+        2: { label: 'For PR Number', color: 'bg-green-100 text-green-700', icon: <Clock className="w-5 h-5 text-green-700" /> },
         3: { label: 'Completed', color: 'bg-green-500 text-white', icon: <CheckCircle className="w-5 h-5 text-green-800" /> },
     };
     const getStatusIcon = (status: string | number) => (statusMap || localStatusMap)[status]?.icon || <FileText className="w-5 h-5 text-gray-600" />;
@@ -145,7 +145,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
     // Stepper for status
     const stepperSteps = [
         { key: 1, label: 'Submitted' },
-        { key: 2, label: 'In-Route' },
+        { key: 2, label: 'For PR Number' },
         { key: 3, label: 'Completed' },
     ];
     const currentStepIndex = stepperSteps.findIndex(s => String(s.key) === String(editedDocument.status));
