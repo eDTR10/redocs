@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useUsers } from '../../context/UserContext';
 import { UserFormData } from '../../types/User';
-import SearchableSelect from '../common/SearchableSelect';
 import { getUniqueProjects} from '../../data/users';
 import axios from 'axios';
 import Swal from 'sweetalert2';
+import Select from 'react-select';
 
 const initialFormData: UserFormData = {
   email: '',
@@ -18,6 +18,18 @@ const initialFormData: UserFormData = {
   password: ''
 };
 
+const accessLevelOptions = [
+  { value: 1, label: 'Regional Director' },
+  { value: 2, label: 'BAC Chairman' },
+  { value: 3, label: 'BAC Member' },
+  { value: 4, label: 'Supply Officer' },
+  { value: 5, label: 'Budget Officer' },
+  { value: 6, label: 'Accountant' },
+  { value: 7, label: 'Inspector' },
+  { value: 8, label: 'End User' },
+  { value: 9, label: 'Job Order' },
+];
+
 const CreateUserModal= ({getUsers}:any) => {
   const { isCreateModalOpen, closeCreateModal,  users } = useUsers();
   const [formData, setFormData] = useState<UserFormData>(initialFormData);
@@ -27,6 +39,9 @@ const CreateUserModal= ({getUsers}:any) => {
 
   const projects = getUniqueProjects(users);
 
+
+  // Convert projects array to react-select options
+  const projectOptions = projects.map((p: string) => ({ value: p, label: p }));
 
   if (!isCreateModalOpen) return null;
 
@@ -96,12 +111,22 @@ const CreateUserModal= ({getUsers}:any) => {
     closeCreateModal();
   };
 
+  const handleAccessLevelChange = (option: any) => {
+    setFormData(prev => ({
+      ...prev,
+      acc_lvl: option ? option.value : 3
+    }));
+    if (errors.acc_lvl) {
+      setErrors(prev => ({ ...prev, acc_lvl: undefined }));
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-10 overflow-y-auto">
       <div className="flex items-center justify-center min-h-screen px-4 text-center">
         <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleCancel}></div>
         
-        <div className="inline-block w-full max-w-md p-6 my-8 overflow-hidden text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
+        <div className="inline-block w-full max-w-md p-6 my-8  text-left align-middle transition-all transform bg-white shadow-xl rounded-lg">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-medium leading-6 text-gray-900">Create New User</h3>
             <button 
@@ -190,20 +215,17 @@ const CreateUserModal= ({getUsers}:any) => {
                 <label htmlFor="acc_lvl" className="block text-sm font-medium text-gray-700">
                   Access Level
                 </label>
-                <select
+                <Select
                   id="acc_lvl"
                   name="acc_lvl"
-                  value={formData.acc_lvl}
-                  onChange={handleChange}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                >
-                  <option value={1}>Admin</option>
-                  <option value={2}>Regional Director</option>
-                  <option value={3}>Provencial Officer</option>
-                  <option value={4}>Pronect Focal</option>
-                  <option value={5}>Standard</option>
-                   <option value={6}>Job Order</option>
-                </select>
+                  defaultInputValue=''
+                  options={accessLevelOptions}
+                  value={accessLevelOptions.find(opt => opt.value === formData.acc_lvl)}
+                  onChange={handleAccessLevelChange}
+                  className="mt-1"
+                  classNamePrefix="react-select"
+                  placeholder="Select Access Level"
+                />
               </div>
             </div>
             
@@ -227,17 +249,24 @@ const CreateUserModal= ({getUsers}:any) => {
               </div>
               
               <div>
-                <SearchableSelect
-                  options={projects}
-                  value={formData.project}
-                  onChange={(value) => {
-                    setFormData(prev => ({ ...prev, project: value }));
+                <label htmlFor="project" className="block text-sm font-medium text-gray-700">
+                  Project
+                </label>
+                <Select
+                  id="project"
+                  name="project"
+                  options={projectOptions}
+                  value={projectOptions.find(opt => opt.value === formData.project)}
+                  onChange={option => {
+                    setFormData(prev => ({ ...prev, project: option ? option.value : '' }));
                     if (errors.project) {
                       setErrors(prev => ({ ...prev, project: undefined }));
                     }
                   }}
+                  className="mt-1"
+                  classNamePrefix="react-select"
                   placeholder="Select Project"
-                  label="Project"
+                  isClearable
                 />
                 {errors.project && (
                   <p className="mt-1 text-sm text-red-600">{errors.project}</p>

@@ -1,3 +1,19 @@
+// Usage example for updating a document from a parent component:
+//
+// import { updateDocument } from '@/services/documents/documents.api';
+//
+// const handleSave = async (updatedDoc: FilledDocument) => {
+//   await updateDocument(updatedDoc.id, updatedDoc);
+//   // Optionally: refresh data, close dialog, show notification, etc.
+// };
+//
+// <DocumentDialog
+//   isOpen={isOpen}
+//   onClose={handleClose}
+//   document={selectedDocument}
+//   mode={mode}
+//   onSave={handleSave}
+// />
 
 import axios from '@/plugin/axios';
 import { FilledDocument } from '@/interfaces/Document';
@@ -28,24 +44,14 @@ export const createDocument = async (data: FilledDocument): Promise<FilledDocume
 
 // Update an existing document by ID
 export const updateDocument = async (id: string, data: Partial<FilledDocument>): Promise<FilledDocument> => {
-  const token = localStorage.getItem('accessToken');
-  const response = await axios.put<FilledDocument>(
-    `document/${id}/`,
-    data,
-    {
-      headers: {
-        Authorization: `Token ${token}`,
-        'Content-Type': 'application/json',
-      },
-    }
-  );
+  const response = await axios.put<FilledDocument>(`document/${id}/`, data);
   return response.data;
 };
 
 
 // Delete a document by ID
 export const deleteDocument = async (id: string): Promise<{ success: boolean; message?: string }> => {
-  const response = await axios.delete<{ success: boolean; message?: string }>(`document/all/${id}/`);
+  const response = await axios.delete<{ success: boolean; message?: string }>(`document/${id}/`);
   return response.data;
 };
 

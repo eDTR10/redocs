@@ -146,10 +146,10 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
     setApproveSuccess(null);
     try {
       const updated = await updateDocument(String(editedDocument.id), { status: 2 });
-      setEditedDocument(updated as ApiDocument);
+      setEditedDocument(updated as unknown as ApiDocument);
       setApproveSuccess('Document approved successfully!');
       if (getDocuments) await getDocuments();
-      if (onSave) onSave(updated as ApiDocument);
+      if (onSave) onSave(updated as unknown as ApiDocument);
     } catch (error: any) {
       setApproveError(
         error?.response?.data?.detail ||
