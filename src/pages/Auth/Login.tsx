@@ -87,12 +87,9 @@ function Login() {
                     email: "", password: ""
                   })
 
-
                   if (response.data.access_level === 0 || response.data.access_level === 3) {
-
                     navigate('/redocs/admin')
                   } else {
-
                     navigate('/redocs/user')
                   }
 

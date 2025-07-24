@@ -7,6 +7,7 @@ axios.defaults.headers.get['Authorization'] = 'Token ' + localStorage.getItem('a
 axios.defaults.headers.delete['Authorization'] = 'Token ' + localStorage.getItem('accessToken');
 axios.defaults.headers.put['Authorization'] = 'Token ' + localStorage.getItem('accessToken');
 axios.defaults.headers.patch['Authorization'] = 'Token ' + localStorage.getItem('accessToken');
+axios.defaults.headers.common['Authorization'] = `Token ${localStorage.getItem('accessToken')}`;
 
 
 export default axios;

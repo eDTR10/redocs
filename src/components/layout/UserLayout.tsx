@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { FileText, Settings, LogOut, Menu, X, Search, ChevronRight, Plus } from 'lucide-react';
+import DocumentTypeSelect from '../common/DocumentTypeSelect';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
 
 const UserLayout = () => {
@@ -234,14 +235,7 @@ const UserLayout = () => {
                             <div className="flex items-center md:space-x-2 space-x-4">
                                 {/* Document Type Selection for Create Document */}
                                 {activeSubNav === 'create-document' && (
-                                    <select className="md:px-2 px-3 py-1 md:text-xs text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500">
-                                        <option value="">Select Document Type</option>
-                                        <option value="purchase-request">Purchase Request</option>
-                                        {/* <option value="purchase-order">Purchase Order</option>
-                                        <option value="memo">Memo</option>
-                                        <option value="letter">Letter</option>
-                                        <option value="report">Report</option> */}
-                                    </select>
+                                    <DocumentTypeSelect value={''} onChange={() => { }} />
                                 )}
                                 <Link
                                     to="/redocs/user/documents/create"

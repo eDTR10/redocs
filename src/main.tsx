@@ -27,7 +27,7 @@ const UserMainContainer = lazy(() =>
 );
 
 const DocumentManage = lazy(() =>
-  wait(1300).then(() => import("./pages/Admin/DocumentManage.tsx"))
+  wait(1300).then(() => import("./pages/Admin/Document/DocumentManage.tsx"))
 );
 
 const FormFiller = lazy(() =>

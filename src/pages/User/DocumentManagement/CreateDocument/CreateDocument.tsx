@@ -11,7 +11,8 @@ type PurchaseRequestItem = {
     totalCost: number;
 };
 // import { PurchaseRequestItem } from '../../../../interfaces/Document';
-import DocumentManage from '@/pages/Admin/DocumentManage';
+import DocumentManage from '@/pages/Admin/Document/DocumentManage';
+import FormEdit from './components/FormEdit';
 
 const CreateDocument = () => {
     // Form state
@@ -91,7 +92,7 @@ const CreateDocument = () => {
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         // Handle form submission
-       
+
     };
 
     return (
@@ -100,7 +101,7 @@ const CreateDocument = () => {
 
 
 
-            <DocumentManage />
+            <FormEdit />
 
             {/* Recent Purchase Requests Table */}
             <div className="bg-white rounded-lg shadow p-6">
