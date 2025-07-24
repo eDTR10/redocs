@@ -28,6 +28,9 @@ function DocumentManage() {
       columns: [],
       data: []
     },
+    groupConfig: {
+      fields: []
+    },
     style: {
       fontSize: '12',
       color: '#000000',

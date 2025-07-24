@@ -3,7 +3,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 export interface Field {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image';
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image' | 'group';
   required: boolean;
   options?: string[];
   coordinates: { x: number; y: number; width: number; height: number } | null;
@@ -18,13 +18,26 @@ export interface Field {
     columns: any[];
     data: any[];
   };
+  groupConfig?: {
+    fields: Field[];
+  };
   style?: {
     fontSize: string;
     color: string;
-    fontFamily: string;    // Added
-    fontWeight: string;    // Added
-    fontStyle: string;     // Added
+    fontFamily: string;
+    fontWeight: string;
+    fontStyle: string;
   };
+}
+
+// Helper function to generate ID from label
+function generateIdFromLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
 }
 
 // Helper function to get PDF font based on fontFamily, fontWeight, and fontStyle
@@ -519,6 +532,125 @@ export async function generatePDFWithFields(
                 color: rgb(1, 0, 0),
                 font,
               });
+            }
+          }
+          break;
+
+        case 'group':
+          // Group fields don't render directly on PDF, but their sub-fields do
+          if (field.groupConfig?.fields) {
+            for (const subField of field.groupConfig.fields) {
+              if (!subField.coordinates) continue;
+              
+              // Process sub-field values from the group structure
+              const groupData = values[field.id] || {};
+              const subFieldValue = groupData[subField.id];
+              
+              // Use the same rendering logic as other field types
+              if (subFieldValue !== undefined && subFieldValue !== '') {
+                const subPdfX = subField.coordinates.x / PREVIEW_SCALE;
+                const subPdfY = page.getHeight() - ((subField.coordinates.y / PREVIEW_SCALE) + (subField.coordinates.height / PREVIEW_SCALE));
+                const subPdfWidth = subField.coordinates.width / PREVIEW_SCALE;
+                const subPdfHeight = subField.coordinates.height / PREVIEW_SCALE;
+                
+                const subFontSize = (parseInt(subField.style?.fontSize || '12') / PREVIEW_SCALE) + 1.5;
+                const subColor = subField.style?.color ? parseColor(subField.style.color) : rgb(0, 0, 0);
+                const subFontFamily = subField.style?.fontFamily || 'Palatino, "Palatino Linotype", serif';
+                const subFontWeight = subField.style?.fontWeight || 'normal';
+                const subFontStyle = subField.style?.fontStyle || 'normal';
+                const subFont = await getPDFFont(pdfDoc, subFontFamily, subFontWeight, subFontStyle);
+                
+                // Render based on sub-field type
+                switch (subField.type) {
+                  case 'text':
+                  case 'number':
+                  case 'email':
+                  case 'date':
+                  case 'select':
+                    page.drawText(String(subFieldValue || ''), {
+                      x: subPdfX + 2,
+                      y: subPdfY + (subPdfHeight / 2) - (subFontSize / 2),
+                      size: subFontSize,
+                      color: subColor,
+                      font: subFont,
+                    });
+                    break;
+                    
+                  case 'checkbox':
+                    const subBoxSize = Math.min(parseInt(subField.style?.fontSize || '12'), subPdfHeight - 4) / PREVIEW_SCALE;
+                    const subCheckboxX = subPdfX + 2;
+                    const subCheckboxY = subPdfY + (subPdfHeight / 2) - (subBoxSize / 2);
+                    
+                    page.drawRectangle({
+                      x: subCheckboxX,
+                      y: subCheckboxY,
+                      width: subBoxSize,
+                      height: subBoxSize,
+                      borderColor: rgb(0, 0, 0),
+                      borderWidth: 1,
+                      color: rgb(1, 1, 1),
+                    });
+                    
+                    const subIsChecked = subFieldValue === true || subFieldValue === 'true' || subFieldValue === 1 || subFieldValue === '1' || subFieldValue === 'on' || subFieldValue === 'yes';
+                    if (subIsChecked) {
+                      page.drawRectangle({
+                        x: subCheckboxX + 1,
+                        y: subCheckboxY + 1,
+                        width: subBoxSize - 2,
+                        height: subBoxSize - 2,
+                        color: subColor,
+                      });
+                    }
+                    break;
+                    
+                  case 'textarea':
+                    if (subFieldValue) {
+                      const subText = String(subFieldValue);
+                      const subLineHeight = subFontSize * 1.2;
+                      
+                      const subLines = [];
+                      const subParagraphs = subText.split('\n');
+                      
+                      for (const paragraph of subParagraphs) {
+                        if (!paragraph.trim()) {
+                          subLines.push('');
+                          continue;
+                        }
+                        
+                        const words = paragraph.split(/\s+/);
+                        let currentLine = '';
+                        
+                        for (const word of words) {
+                          const testLine = currentLine + (currentLine ? ' ' : '') + word;
+                          const testWidth = testLine.length * subFontSize * 0.6;
+                          
+                          if (testWidth > (subPdfWidth * PREVIEW_SCALE) - 10 && currentLine) {
+                            subLines.push(currentLine);
+                            currentLine = word;
+                          } else {
+                            currentLine = testLine;
+                          }
+                        }
+                        
+                        if (currentLine) {
+                          subLines.push(currentLine);
+                        }
+                      }
+                      
+                      const subMaxLines = Math.floor((subPdfHeight * PREVIEW_SCALE) / (subLineHeight * PREVIEW_SCALE));
+                      subLines.slice(0, subMaxLines).forEach((line, index) => {
+                        page.drawText(line, {
+                          x: subPdfX + 4,
+                          y: subPdfY + subPdfHeight - ((subLineHeight * (index + 1)) / PREVIEW_SCALE),
+                          size: subFontSize,
+                          color: subColor,
+                          font: subFont,
+                        });
+                      });
+                    }
+                    break;
+                }
+              }
             }
           }
           break;

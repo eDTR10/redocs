@@ -268,7 +268,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         const value = previewValues[field.id] || '';
         ctx.fillStyle = field.style?.color || '#000000';
         ctx.font = getFontString(field);
-        ctx.fillText(value, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
+        ctx.fillText(String(value), field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
         break;
 
       case 'date':
@@ -282,7 +282,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         const selectValue = previewValues[field.id] || '';
         ctx.fillStyle = field.style?.color || '#000000';
         ctx.font = getFontString(field);
-        ctx.fillText(selectValue, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
+        ctx.fillText(String(selectValue), field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
         break;
 
       case 'checkbox':
@@ -304,7 +304,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         break;
 
       case 'textarea':
-        const textareaValue = previewValues[field.id] || '';
+        const textareaValue = String(previewValues[field.id] || ''); // Convert to string first
         const fontSize = parseInt(field.style?.fontSize || '12');
         const lineHeight = fontSize + 4;
         const maxLines = Math.floor(field.coordinates.height / lineHeight);
@@ -331,25 +331,27 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           return lines;
         };
 
-        const paragraphs = textareaValue.split('\n');
-        let currentY = field.coordinates.y + lineHeight;
-        let lineCount = 0;
+        if (textareaValue) {
+          const paragraphs = textareaValue.split('\n');
+          let currentY = field.coordinates.y + lineHeight;
+          let lineCount = 0;
 
-        for (const paragraph of paragraphs) {
-          if (lineCount >= maxLines) break;
-          
-          const wrappedLines = wrapText(paragraph, field.coordinates.width);
-          for (const line of wrappedLines) {
+          for (const paragraph of paragraphs) {
             if (lineCount >= maxLines) break;
             
-            ctx.fillText(
-              line,
-              field.coordinates.x + 5,
-              currentY
-            );
-            
-            currentY += lineHeight;
-            lineCount++;
+            const wrappedLines = wrapText(paragraph, field.coordinates.width);
+            for (const line of wrappedLines) {
+              if (lineCount >= maxLines) break;
+              
+              ctx.fillText(
+                line,
+                field.coordinates.x + 5,
+                currentY
+              );
+              
+              currentY += lineHeight;
+              lineCount++;
+            }
           }
         }
         break;
@@ -372,14 +374,14 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           let maxRowHeight = baseCellHeight;
           
           field.tableConfig.columns.forEach((col, colIndex) => {
-            const cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+            const cellValue = String(previewValues[`${field.id}_${row}_${colIndex}`] || ''); // Convert to string
             if (cellValue) {
               hasContent = true;
               const colWidth = col.width ? col.width * widthScale : availableWidth / field.tableConfig.columns.length;
               
               // Calculate required height for text wrapping
               ctx.font = getFontString(field, field.style?.fontSize || '11');
-              const words = String(cellValue).split(' ');
+              const words = cellValue.split(' ');
               const lines = [];
               let currentLine = '';
               
@@ -408,7 +410,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
         let lastContentRow = -1;
         for (let row = 0; row < field.tableConfig.rows; row++) {
           for (let colIndex = 0; colIndex < field.tableConfig.columns.length; colIndex++) {
-            const cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+            const cellValue = String(previewValues[`${field.id}_${row}_${colIndex}`] || ''); // Convert to string
             if (cellValue) {
               lastContentRow = Math.max(lastContentRow, row);
             }
@@ -459,13 +461,13 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           const colWidth = col.width ? col.width * widthScale : availableWidth / field.tableConfig.columns.length;
           
           for (let row = 0; row < visibleRows; row++) {
-            const cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+            const cellValue = String(previewValues[`${field.id}_${row}_${colIndex}`] || ''); // Convert to string
             if (cellValue) {
               ctx.fillStyle = field.style?.color || '#000000';
               ctx.font = getFontString(field, field.style?.fontSize || '11');
               
               // Text wrapping for cell content
-              const words = String(cellValue).split(' ');
+              const words = cellValue.split(' ');
               const lines = [];
               let currentLine = '';
               
@@ -600,6 +602,116 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
             field.coordinates.y + field.coordinates.height / 2
           );
           ctx.textAlign = 'left';
+        }
+        break;
+
+      case 'group':
+        // Group fields show a container outline and render sub-fields
+        if (!showPreviewMode) {
+          ctx.strokeStyle = '#9333ea';
+          ctx.setLineDash([5, 5]);
+          ctx.strokeRect(field.coordinates.x, field.coordinates.y, field.coordinates.width, field.coordinates.height);
+          ctx.setLineDash([]);
+          
+          ctx.fillStyle = '#9333ea';
+          ctx.font = 'bold 12px Palatino, "Palatino Linotype", serif';
+          ctx.fillText(`GROUP: ${field.label}`, field.coordinates.x + 5, field.coordinates.y - 5);
+        }
+        
+        // Render sub-fields
+        if (field.groupConfig?.fields) {
+          const groupData = previewValues[field.id] || {};
+          
+          field.groupConfig.fields.forEach(subField => {
+            if (!subField.coordinates) return;
+            
+            const subValue = groupData[subField.id];
+            ctx.fillStyle = subField.style?.color || '#000000';
+            ctx.font = getFontString(subField);
+            
+            switch (subField.type) {
+              case 'text':
+              case 'email':
+              case 'number':
+                if (subValue) {
+                  ctx.fillText(String(subValue), subField.coordinates.x + 5, subField.coordinates.y + (subField.coordinates.height / 2) + 5);
+                }
+                break;
+                
+              case 'checkbox':
+                const subIsChecked = subValue;
+                ctx.strokeStyle = subField.style?.color || '#000000';
+                ctx.lineWidth = 1;
+                const subBoxSize = Math.min(parseInt(subField.style?.fontSize || '12'), subField.coordinates.height - 4);
+                const subX = subField.coordinates.x + 2;
+                const subY = subField.coordinates.y + (subField.coordinates.height / 2) - (subBoxSize / 2);
+                
+                ctx.strokeRect(subX, subY, subBoxSize, subBoxSize);
+                
+                if (subIsChecked) {
+                  ctx.fillStyle = subField.style?.color || '#000000';
+                  ctx.fillRect(subX + 1, subY + 1, subBoxSize - 2, subBoxSize - 2);
+                }
+                break;
+                
+              case 'textarea':
+                if (subValue) {
+                  const subValueString = String(subValue); // Convert to string first
+                  const subFontSize = parseInt(subField.style?.fontSize || '12');
+                  const subLineHeight = subFontSize + 4;
+                  const subMaxLines = Math.floor(subField.coordinates.height / subLineHeight);
+                  
+                  const subWrapText = (text: string, maxWidth: number) => {
+                    const words = text.split(' ');
+                    const lines = [];
+                    let currentLine = words[0] || '';
+
+                    for (let i = 1; i < words.length; i++) {
+                      const word = words[i];
+                      const width = ctx.measureText(currentLine + ' ' + word).width;
+                      if (width < maxWidth - 10) {
+                        currentLine += ' ' + word;
+                      } else {
+                        lines.push(currentLine);
+                        currentLine = word;
+                      }
+                    }
+                    if (currentLine) lines.push(currentLine);
+                    return lines;
+                  };
+
+                  const subParagraphs = subValueString.split('\n');
+                  let currentY = subField.coordinates.y + subLineHeight;
+                  let lineCount = 0;
+
+                  for (const paragraph of subParagraphs) {
+                    if (lineCount >= subMaxLines) break;
+                    
+                    const wrappedLines = subWrapText(paragraph, subField.coordinates.width);
+                    for (const line of wrappedLines) {
+                      if (lineCount >= subMaxLines) break;
+                      
+                      ctx.fillText(
+                        line,
+                        subField.coordinates.x + 5,
+                        currentY
+                      );
+                      
+                      currentY += subLineHeight;
+                      lineCount++;
+                    }
+                  }
+                }
+                break;
+            }
+            
+            // Show field labels in edit mode
+            if (!showPreviewMode) {
+              ctx.fillStyle = '#6b7280';
+              ctx.font = '10px Palatino, "Palatino Linotype", serif';
+              ctx.fillText(subField.label, subField.coordinates.x + 2, subField.coordinates.y - 2);
+            }
+          });
         }
         break;
     }

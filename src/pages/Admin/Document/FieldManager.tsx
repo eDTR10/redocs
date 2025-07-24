@@ -3,15 +3,44 @@ import { Trash2, Edit, Plus, Upload, X, File, Pen } from 'lucide-react';
 
 // Add to your Field interface
 export interface Field {
-  // ...existing properties...
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image' | 'group';
+  required: boolean;
+  options?: string[];
+  coordinates: { x: number; y: number; width: number; height: number } | null;
+  page: number;
+  listConfig?: {
+    minItems: number;
+    maxItems: number;
+    columns: any[];
+  };
+  tableConfig?: {
+    rows: number;
+    columns: any[];
+    data: any[];
+  };
+  groupConfig?: {
+    fields: Field[];
+  };
   style?: {
     fontSize: string;
     color: string;
-    fontFamily: string;    // New
-    fontWeight: string;    // New
-    fontStyle: string;     // New
+    fontFamily: string;
+    fontWeight: string;
+    fontStyle: string;
   };
 }
+
+// Helper function to generate ID from label
+const generateIdFromLabel = (label: string): string => {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
+    .replace(/\s+/g, '_') // Replace spaces with underscores
+    .replace(/_{2,}/g, '_') // Replace multiple underscores with single
+    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+};
 
 interface FieldManagerProps {
   fields: Field[];
@@ -67,11 +96,13 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const addField = () => {
+    const fieldId = generateIdFromLabel(currentField.label) || `field_${Date.now()}`;
+    
     if (editingField) {
-      setFields(fields.map(f => f.id === editingField.id ? currentField : f));
+      setFields(fields.map(f => f.id === editingField.id ? { ...currentField, id: fieldId } : f));
       setEditingField(null);
     } else {
-      setFields([...fields, { ...currentField }]);
+      setFields([...fields, { ...currentField, id: fieldId }]);
     }
     setShowFieldModal(false);
     setCurrentField({
@@ -92,6 +123,9 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
         columns: [],
         data: []
       },
+      groupConfig: {
+        fields: []
+      },
       style: {
         fontSize: '12',
         color: '#000000',
@@ -102,26 +136,57 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
     });
   };
 
-  const addOption = () => {
+  const addGroupField = () => {
+    const newField: Field = {
+      id: generateIdFromLabel(`sub_field_${currentField.groupConfig.fields.length + 1}`),
+      label: `Sub Field ${currentField.groupConfig.fields.length + 1}`,
+      type: 'text',
+      required: false,
+      options: [],
+      coordinates: null,
+      page: 1,
+      style: {
+        fontSize: '12',
+        color: '#000000',
+        fontFamily: 'Palatino, "Palatino Linotype", serif',
+        fontWeight: 'normal',
+        fontStyle: 'normal'
+      }
+    };
+
     setCurrentField({
       ...currentField,
-      options: [...currentField.options, '']
+      groupConfig: {
+        ...currentField.groupConfig,
+        fields: [...currentField.groupConfig.fields, newField]
+      }
     });
   };
 
-  const updateOption = (index: number, value: string) => {
-    const newOptions = [...currentField.options];
-    newOptions[index] = value;
+  const updateGroupField = (index: number, updatedField: Partial<Field>) => {
+    const newFields = [...currentField.groupConfig.fields];
+    newFields[index] = { 
+      ...newFields[index], 
+      ...updatedField,
+      id: updatedField.label ? generateIdFromLabel(updatedField.label) : newFields[index].id
+    };
+    
     setCurrentField({
       ...currentField,
-      options: newOptions
+      groupConfig: {
+        ...currentField.groupConfig,
+        fields: newFields
+      }
     });
   };
 
-  const removeOption = (index: number) => {
+  const removeGroupField = (index: number) => {
     setCurrentField({
       ...currentField,
-      options: currentField.options.filter((_, i) => i !== index)
+      groupConfig: {
+        ...currentField.groupConfig,
+        fields: currentField.groupConfig.fields.filter((_, i) => i !== index)
+      }
     });
   };
 
@@ -437,6 +502,211 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             </div>
           </div>
         );
+      case 'group':
+        const groupData = previewValues[field.id] || {};
+        
+        return (
+          <div className="border rounded p-3 bg-gray-50">
+            <div className="font-medium text-gray-800 mb-3">{field.label}</div>
+            
+            {/* Regular group fields */}
+            <div className="space-y-3">
+              {field.groupConfig.fields.map((subField, index) => (
+                <div key={subField.id} className="space-y-1">
+                  <label className="text-sm font-medium text-gray-600">
+                    {subField.label}
+                    {subField.required && <span className="text-red-500 ml-1">*</span>}
+                  </label>
+                  
+                  {subField.type === 'text' && (
+                    <input
+                      type="text"
+                      className="w-full p-2 border rounded"
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
+                  
+                  {subField.type === 'number' && (
+                    <input
+                      type="number"
+                      className="w-full p-2 border rounded"
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
+                  
+                  {subField.type === 'checkbox' && (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={groupData[subField.id] || false}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [subField.id]: e.target.checked
+                          }
+                        })}
+                        className="w-4 h-4"
+                      />
+                      <span className="text-sm text-gray-600">Yes/No</span>
+                    </div>
+                  )}
+                  
+                  {subField.type === 'textarea' && (
+                    <textarea
+                      className="w-full p-2 border rounded"
+                      rows={2}
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
+                  
+                  {subField.type === 'select' && (
+                    <select
+                      className="w-full p-2 border rounded"
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    >
+                      <option value="">Select...</option>
+                      {subField.options?.map((opt, i) => (
+                        <option key={i} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+              ))}
+            </div>
+            
+            {/* Dynamic list of additional fields */}
+            <div className="mt-4">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium text-gray-600">Additional Fields</span>
+                <button
+                  onClick={() => {
+                    const fieldCount = (groupData.group_fields || []).length;
+                    const newGroupFields = [...(groupData.group_fields || []), {}];
+                    
+                    setPreviewValues({
+                      ...previewValues,
+                      [field.id]: {
+                        ...groupData,
+                        group_fields: newGroupFields
+                      }
+                    });
+                  }}
+                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
+                >
+                  <Plus size={14} />
+                  Add Item
+                </button>
+              </div>
+              
+              {(groupData.group_fields || []).map((item: any, itemIndex: number) => (
+                <div key={itemIndex} className="border rounded p-2 mb-2 bg-white">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="text-xs font-medium text-gray-500">Item {itemIndex + 1}</span>
+                    <button
+                      onClick={() => {
+                        const newGroupFields = (groupData.group_fields || []).filter((_: any, i: number) => i !== itemIndex);
+                        setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            group_fields: newGroupFields
+                          }
+                        });
+                      }}
+                      className="text-red-600 hover:text-red-800"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                  
+                  <div className="space-y-2">
+                    {field.groupConfig.fields.map((subField, subIndex) => (
+                      <div key={subField.id} className="space-y-1">
+                        <label className="text-xs text-gray-500">{subField.label}</label>
+                        
+                        {subField.type === 'text' && (
+                          <input
+                            type="text"
+                            className="w-full p-1 border rounded text-sm"
+                            value={item[subField.id] || ''}
+                            onChange={(e) => {
+                              const newGroupFields = [...(groupData.group_fields || [])];
+                              newGroupFields[itemIndex] = {
+                                ...newGroupFields[itemIndex],
+                                [subField.id]: e.target.value
+                              };
+                              
+                              setPreviewValues({
+                                ...previewValues,
+                                [field.id]: {
+                                  ...groupData,
+                                  group_fields: newGroupFields
+                                }
+                              });
+                            }}
+                          />
+                        )}
+                        
+                        {subField.type === 'checkbox' && (
+                          <input
+                            type="checkbox"
+                            checked={item[subField.id] || false}
+                            onChange={(e) => {
+                              const newGroupFields = [...(groupData.group_fields || [])];
+                              newGroupFields[itemIndex] = {
+                                ...newGroupFields[itemIndex],
+                                [subField.id]: e.target.checked
+                              };
+                              
+                              setPreviewValues({
+                                ...previewValues,
+                                [field.id]: {
+                                  ...groupData,
+                                  group_fields: newGroupFields
+                                }
+                              });
+                            }}
+                            className="w-4 h-4"
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+
       default:
         return <div className="text-sm text-gray-500">Preview not available</div>;
     }
@@ -559,152 +829,91 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                   <option value="textarea">Textarea</option>
                   <option value="image">Image</option>
                   <option value="table">Table</option>
+                  <option value="group">Group</option>
                 </select>
               </div>
 
-              {(currentField.type === 'select' || currentField.type === 'checkbox') && (
+              {/* Group Configuration */}
+              {currentField.type === 'group' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Options
+                    Group Fields Configuration
                   </label>
-                  <div className="space-y-2">
-                    {currentField.options.map((option, index) => (
-                      <div key={index} className="flex gap-2">
-                        <input
-                          type="text"
-                          value={option}
-                          onChange={(e) => updateOption(index, e.target.value)}
-                          className="flex-1 p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          placeholder={`Option ${index + 1}`}
-                        />
-                        <button
-                          onClick={() => removeOption(index)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                  <div className="space-y-3">
+                    {currentField.groupConfig.fields.map((groupField, index) => (
+                      <div key={index} className="border rounded p-3 bg-gray-50">
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="text-sm font-medium">Field {index + 1}</span>
+                          <button
+                            onClick={() => removeGroupField(index)}
+                            className="text-red-600 hover:text-red-800"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                          <div>
+                            <label className="text-xs text-gray-600">Label</label>
+                            <input
+                              type="text"
+                              value={groupField.label}
+                              onChange={(e) => updateGroupField(index, { label: e.target.value })}
+                              className="w-full p-2 border rounded"
+                              placeholder="Field label"
+                            />
+                          </div>
+                          
+                          <div>
+                            <label className="text-xs text-gray-600">Type</label>
+                            <select
+                              value={groupField.type}
+                              onChange={(e) => updateGroupField(index, { type: e.target.value as Field['type'] })}
+                              className="w-full p-2 border rounded"
+                            >
+                              <option value="text">Text</option>
+                              <option value="number">Number</option>
+                              <option value="checkbox">Checkbox</option>
+                              <option value="select">Select</option>
+                              <option value="textarea">Textarea</option>
+                            </select>
+                          </div>
+                        </div>
+                        
+                        {groupField.type === 'select' && (
+                          <div className="mt-2">
+                            <label className="text-xs text-gray-600">Options (comma-separated)</label>
+                            <input
+                              type="text"
+                              value={groupField.options?.join(', ') || ''}
+                              onChange={(e) => updateGroupField(index, { 
+                                options: e.target.value.split(',').map(opt => opt.trim()).filter(opt => opt) 
+                              })}
+                              className="w-full p-2 border rounded"
+                              placeholder="Option 1, Option 2, Option 3"
+                            />
+                          </div>
+                        )}
+                        
+                        <div className="mt-2 flex items-center">
+                          <input
+                            type="checkbox"
+                            checked={groupField.required}
+                            onChange={(e) => updateGroupField(index, { required: e.target.checked })}
+                            className="mr-2"
+                          />
+                          <label className="text-xs text-gray-600">Required</label>
+                        </div>
                       </div>
                     ))}
+                    
                     <button
-                      onClick={addOption}
+                      onClick={addGroupField}
                       className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
                     >
                       <Plus size={16} />
-                      Add Option
+                      Add Group Field
                     </button>
-                  </div>
-                </div>
-              )}
-              
-              {currentField.type === 'table' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Table Configuration
-                  </label>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="text-xs text-gray-600">Initial Number of Rows</label>
-                      <div className="text-xs text-gray-500 mb-1">
-                        (Can be extended when filling the form)
-                      </div>
-                      <input
-                        type="number"
-                        min="1"
-                        value={currentField.tableConfig.rows}
-                        onChange={(e) => setCurrentField({
-                          ...currentField,
-                          tableConfig: {
-                            ...currentField.tableConfig,
-                            rows: parseInt(e.target.value) || 1
-                          }
-                        })}
-                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-gray-600">Columns</label>
-                      <div className="space-y-2">
-                        {currentField.tableConfig.columns.map((column, index) => (
-                          <div key={index} className="flex gap-2">
-                            <input
-                              type="text"
-                              value={column.label}
-                              onChange={(e) => {
-                                const newColumns = [...currentField.tableConfig.columns];
-                                newColumns[index] = { 
-                                  ...column, 
-                                  label: e.target.value 
-                                };
-                                setCurrentField({
-                                  ...currentField,
-                                  tableConfig: {
-                                    ...currentField.tableConfig,
-                                    columns: newColumns
-                                  }
-                                });
-                              }}
-                              className="flex-1 p-2 border rounded-lg"
-                              placeholder={`Column ${index + 1} header`}
-                            />
-                            <input
-                              type="number"
-                              min="50"
-                              value={column.width}
-                              onChange={(e) => {
-                                const newColumns = [...currentField.tableConfig.columns];
-                                newColumns[index] = { 
-                                  ...column, 
-                                  width: parseInt(e.target.value) || 100 
-                                };
-                                setCurrentField({
-                                  ...currentField,
-                                  tableConfig: {
-                                    ...currentField.tableConfig,
-                                    columns: newColumns
-                                  }
-                                });
-                              }}
-                              className="w-24 p-2 border rounded-lg"
-                              placeholder="Width"
-                            />
-                            <button
-                              onClick={() => {
-                                const newColumns = currentField.tableConfig.columns.filter((_, i) => i !== index);
-                                setCurrentField({
-                                  ...currentField,
-                                  tableConfig: {
-                                    ...currentField.tableConfig,
-                                    columns: newColumns
-                                  }
-                                });
-                              }}
-                              className="text-red-600 hover:text-red-800"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          onClick={() => {
-                            setCurrentField({
-                              ...currentField,
-                              tableConfig: {
-                                ...currentField.tableConfig,
-                                columns: [...currentField.tableConfig.columns, { 
-                                  label: '', 
-                                  width: 100,
-                                  type: 'text'
-                                }]
-                              }
-                            });
-                          }}
-                          className="flex items-center gap-2 text-blue-600 hover:text-blue-800"
-                        >
-                          <Plus size={16} />
-                          Add Column
-                        </button>
-                      </div>
-                    </div>
                   </div>
                 </div>
               )}
