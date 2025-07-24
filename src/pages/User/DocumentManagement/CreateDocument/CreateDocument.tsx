@@ -12,7 +12,7 @@ type PurchaseRequestItem = {
 };
 // import { PurchaseRequestItem } from '../../../../interfaces/Document';
 import DocumentManage from '@/pages/Admin/Document/DocumentManage';
-import FormEdit from './components/FormEdit';
+import FormEdit from './components/forms/FormEdit';
 
 const CreateDocument = () => {
     // Form state

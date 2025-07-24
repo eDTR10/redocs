@@ -74,29 +74,8 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
 
     const handleSave = async () => {
         if (!editedDocument) return;
-        // For each assignature, set sign_img to Cloudinary URL (if found) using a.name
-        const updatedAssignatures = await Promise.all(
-            editedDocument.assignatures.map(async (a) => {
-                if (!a.name) return a;
-                const baseName = a.name.replace(/[^a-zA-Z0-9]/g, '_');
-                const tryExts = ['png', 'jpg', 'jpeg', 'webp'];
-                let foundUrl = '';
-                for (const ext of tryExts) {
-                    const publicId = `signatures/${baseName}.${ext}`;
-                    const url = getCloudinaryImageUrl(publicId);
-                    try {
-                        const res = await fetch(url, { method: 'HEAD' });
-                        if (res.ok) {
-                            foundUrl = url;
-                            break;
-                        }
-                    } catch { }
-                }
-                // Always set sign_img to Cloudinary URL if found, otherwise keep the current value
-                return { ...a, sign_img: foundUrl || a.sign_img };
-            })
-        );
-        const updatedDoc = { ...editedDocument, assignatures: updatedAssignatures, status: 2 };
+        // Plain save: do not update sign_img from Cloudinary
+        const updatedDoc = { ...editedDocument, status: 2 };
         if (onSave) onSave(updatedDoc);
         setIsEditing(false);
     };
@@ -542,7 +521,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                             className="px-4 py-2 border border-blue-500 text-blue-700 bg-white rounded-md text-sm font-medium hover:bg-blue-50 mr-4"
                             onClick={async () => {
                                 if (!editedDocument) return;
-                                // For each assignature, set sign_img to Cloudinary URL (if found) using a.name
+                                // Only on Approve: update sign_img from Cloudinary
                                 const updatedAssignatures = await Promise.all(
                                     editedDocument.assignatures.map(async (a) => {
                                         if (!a.name) return a;
@@ -612,6 +591,7 @@ const DocumentDialog: React.FC<DocumentDialogProps> = ({
                                         className="ml-2 px-4 py-2 border border-blue-500 text-blue-700 bg-white rounded-md text-sm font-medium hover:bg-blue-50"
                                         onClick={async () => {
                                             if (!editedDocument) return;
+                                            // Only on Approve & Save: update sign_img from Cloudinary
                                             const updatedAssignatures = await Promise.all(
                                                 editedDocument.assignatures.map(async (a) => {
                                                     if (!a.name) return a;

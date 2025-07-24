@@ -9,6 +9,7 @@ interface DocumentTypeSelectProps {
 const DOCUMENT_TYPES = [
     { value: '', label: 'Select Document Type' },
     { value: 'purchase-request', label: 'Purchase Request' },
+    { value: 'disbursement-voucher', label: 'Disbursement Voucher' },
     // Add more document types as needed
     // { value: 'purchase-order', label: 'Purchase Order' },
     // { value: 'memo', label: 'Memo' },

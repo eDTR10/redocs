@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useDocumentType } from '../../context/DocumentTypeContext';
 import { FileText, Settings, LogOut, Menu, X, Search, ChevronRight, Plus } from 'lucide-react';
 import DocumentTypeSelect from '../common/DocumentTypeSelect';
 import { Outlet, useLocation, Link, useNavigate } from 'react-router-dom';
@@ -8,6 +9,7 @@ const UserLayout = () => {
     const navigate = useNavigate();
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [myDocumentsOpen, setMyDocumentsOpen] = useState(false);
+    const { documentType, setDocumentType } = useDocumentType();
 
     // Determine active navigation based on current route
     const getActiveNavigation = () => {
@@ -235,7 +237,7 @@ const UserLayout = () => {
                             <div className="flex items-center md:space-x-2 space-x-4">
                                 {/* Document Type Selection for Create Document */}
                                 {activeSubNav === 'create-document' && (
-                                    <DocumentTypeSelect value={''} onChange={() => { }} />
+                                    <DocumentTypeSelect value={documentType} onChange={setDocumentType} />
                                 )}
                                 <Link
                                     to="/redocs/user/documents/create"

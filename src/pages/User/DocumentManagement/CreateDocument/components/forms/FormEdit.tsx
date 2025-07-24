@@ -1,15 +1,18 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useDocumentType } from '@/context/DocumentTypeContext';
 import { Download, Upload, Plus, Eye, Settings, Save } from 'lucide-react';
 
-import DocumentTypeSelect from '@/components/common/DocumentTypeSelect';
-import Template1 from '/PR.pdf';
+// Removed unused imports
 import axios from '@/plugin/axios';
 import Swal from 'sweetalert2';
-import { Field, FieldManager } from '@/pages/Admin/Document/FieldManager';
+
 import { generatePDFWithFields } from '@/pages/Admin/Document/pdfGenerator';
-import { PDFViewer } from '@/pages/Admin/Document/PDFViewer';
+import PDFViewerDialog from '../pdf_viewer_dialog';
+import { Field, FieldManager } from './FieldManager';
+import { createDocument } from '@/services/documents/documents.api';
 
 function FormEdit() {
+    const { documentType } = useDocumentType();
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [pdfUrl, setPdfUrl] = useState<string | null>(null);
     const [fields, setFields] = useState<Field[]>([]);
@@ -46,14 +49,110 @@ function FormEdit() {
     const [jsonTemplate, setJsonTemplate] = useState('');
     const [showPreview, setShowPreview] = useState(false);
     const [editingField, setEditingField] = useState<Field | null>(null);
-    const [showPreviewMode, setShowPreviewMode] = useState(false);
+    const [showPreviewMode, setShowPreviewMode] = useState(true);
     const [previewValues, setPreviewValues] = useState({});
     const [drawingMode, setDrawingMode] = useState(false);
     const [documentName, setDocumentName] = useState('');
     const [selectedTemplate, setSelectedTemplate] = useState<string>('');
     const [isSaving, setIsSaving] = useState(false);
+    const [isSavingAndAdding, setIsSavingAndAdding] = useState(false);
+    // Save and add another document (correct structure)
+    const handleSaveAndAddAnother = async () => {
+        setIsSavingAndAdding(true);
+        try {
+            // First assignature: from user input (e.g., previewValues['submitted_by'] or previewValues['name'])
+            const pv: any = previewValues;
+            const firstAssignatureName = pv['submitted_by'] || pv['name'] || '';
+            const assignaturesList = [];
+            if (firstAssignatureName && firstAssignatureName !== 'Sittie Rahma Alawi') {
+                assignaturesList.push({
+                    id: 1,
+                    name: firstAssignatureName,
+                    sign_img: '',
+                    status: false,
+                    signed_date: null
+                });
+            }
+            // Always add Sittie Rahma Alawi as assignature 2
+            assignaturesList.push({
+                id: 2,
+                name: 'Sittie Rahma Alawi',
+                sign_img: 'https://thirdparty.com/signature/jane.png',
+                status: false,
+                signed_date: null
+            });
+            const submittedBy = firstAssignatureName ? firstAssignatureName : '[No name provided]';
+            const newDoc = {
+                name: documentName,
+                status: 1, // Example: 3 (replace as needed)
+                created_by: 1, // Example: 1 (replace with actual user ID)
+                submitted_by: submittedBy,
+                template: 5, // Example: 1 (replace with actual template ID)
+                document_data: { ...previewValues },
+                to_route: '1',
+                assignatures: assignaturesList,
+                remarks: [],
+                department: pv['office'] || ''
+            };
+            await createDocument(newDoc);
+            await Swal.fire({
+                icon: 'success',
+                title: 'Document Added',
+                text: 'The document has been saved. You can add another.',
+                timer: 1800,
+                showConfirmButton: false,
+            });
+            // Reset form for new entry
+            setDocumentName('');
+            setFields([]);
+            setPreviewValues({});
+            setPdfFile(null);
+            setPdfUrl(null);
+            setCurrentField({
+                id: '',
+                label: '',
+                type: 'text',
+                required: false,
+                options: [],
+                coordinates: null,
+                page: 1,
+                listConfig: {
+                    minItems: 1,
+                    maxItems: 10,
+                    columns: []
+                },
+                tableConfig: {
+                    rows: 1,
+                    columns: [],
+                    data: []
+                },
+                groupConfig: {
+                    fields: []
+                },
+                style: {
+                    fontSize: '12',
+                    color: '#000000',
+                    fontFamily: 'Palatino, "Palatino Linotype", serif',
+                    fontWeight: 'normal',
+                    fontStyle: 'normal'
+                }
+            });
+        } catch (error) {
+            console.error('Error saving document:', error);
+            await Swal.fire({
+                icon: 'error',
+                title: 'Save Failed',
+                text: 'There was an error saving your document. Please try again.',
+                showConfirmButton: true,
+                confirmButtonText: 'OK',
+            });
+        } finally {
+            setIsSavingAndAdding(false);
+        }
+    };
     const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
-    const [documentType, setDocumentType] = useState('');
+    const [showPDFViewer, setShowPDFViewer] = useState(false); // State for toggling PDF Viewer dialog
+    // Removed local documentType state, now using context
 
     const [templates, setTemplate] = useState<any[]>([]);
 
@@ -69,40 +168,49 @@ function FormEdit() {
 
     useEffect(() => {
         // Fetch templates from the server
-
-
         fetchTemplates();
     }, []);
 
-    const TEMPLATES = [
-        { id: 'template1', name: 'Purchase Request Form 1', path: Template1 },
-    ];
+    // Auto-select template when documentType changes
+    useEffect(() => {
+        if (!documentType) return;
+        // Map documentType to template name (adjust as needed)
+        const typeToNameMap: Record<string, string> = {
+            'purchase-request': 'Purchase Request',
+            'disbursement-voucher': 'Disbursement Voucher',
+        };
+        const templateName = typeToNameMap[documentType];
+        if (!templateName) return;
+        // Try to find a template in the fetched templates
+        const found = templates.find(t => t.name && t.name.toLowerCase().includes(templateName.toLowerCase()));
+        if (found) {
+            handleServerTemplateSelect(found.id.toString());
+        } else if (documentType === 'disbursement-voucher') {
+            // Fallback: load DV.pdf from public if not found in templates
+            const publicDV = '/DV.pdf';
+            fetch(publicDV)
+                .then(res => res.blob())
+                .then(blob => {
+                    const file = new File([blob], 'DV.pdf', { type: 'application/pdf' });
+                    setPdfFile(file);
+                    const url = URL.createObjectURL(file);
+                    setPdfUrl(url);
+                    setDocumentName('Disbursement Voucher');
+                    setFields([]);
+                })
+                .catch(() => {
+                    setPdfFile(null);
+                    setPdfUrl(null);
+                });
+        }
+    }, [documentType, templates]);
 
+    // Removed local template select and related logic. Now using document type from UserLayout.
     const removeRedocsPrefix = (filePath: string) => {
         if (filePath && filePath.startsWith('/redocs')) {
             return filePath.replace('/redocs', '');
         }
         return filePath;
-    };
-
-
-
-    const handleTemplateSelect = (templateId: string) => {
-        const template = TEMPLATES.find(t => t.id === templateId);
-        if (template) {
-            setSelectedTemplate(template.path);
-
-
-            setDocumentName(template.name);
-            fetch(template.path)
-                .then(res => res.blob())
-                .then(blob => {
-                    const file = new File([blob], template.name + '.pdf', { type: 'application/pdf' });
-                    setPdfFile(file);
-                    const url = URL.createObjectURL(file);
-                    setPdfUrl(url);
-                });
-        }
     };
 
     const handleServerTemplateSelect = async (templateId: string) => {
@@ -535,205 +643,156 @@ function FormEdit() {
     }, [showPreviewMode]);
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-7xl mx-auto">
+        <div className="min-h-full bg-gray-50 p-6">
+            <div className=" mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-
-                    <div className=' flex justify-between '>
-                        <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
-
-                        <button
-                            onClick={saveTemplate}
-                            disabled={fields.length === 0 || isSaving}
-                            className="flex items-center h-full justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {isSaving ? (
-                                <>
-                                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                                    Saving...
-                                </>
-                            ) : (
-                                <>
-                                    <Save size={20} />
-                                    Save Document
-                                </>
-                            )}
-                        </button>
-
-                    </div>
-
-
-
-
-                    {/* File Upload Section */}
-                    <div className="mb-6">
-                        <div className="flex items-center gap-4 mb-4 flex-wrap">
-                            <select
-                                onChange={(e) => handleTemplateSelect(e.target.value)}
-                                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                                defaultValue=""
-                            >
-                                <option value="" disabled>Select Local Template</option>
-                                {TEMPLATES.map(template => (
-                                    <option key={template.id} value={template.id}>
-                                        {template.name}
-                                    </option>
-                                ))}
-                            </select>
-
-                            <select
-                                onChange={(e) => handleServerTemplateSelect(e.target.value)}
-                                disabled={isLoadingTemplate}
-                                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-gray-100"
-                                defaultValue=""
-                            >
-                                <option value="" disabled>
-                                    {isLoadingTemplate ? 'Loading Templates...' : 'Select Server Template'}
-                                </option>
-                                {templates.map(template => (
-                                    <option key={template.id} value={template.id.toString()}>
-                                        {template.name}
-                                    </option>
-                                ))}
-                            </select>
-
-                            {/* Document Name Input */}
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
+                    {/* Form Section */}
+                    <form className="space-y-6">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Input your file name</label>
                             <input
                                 type="text"
                                 value={documentName}
                                 onChange={(e) => setDocumentName(e.target.value)}
                                 placeholder="Enter document name"
-                                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[200px]"
+                                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[200px] w-full"
                             />
-
-                            <button
-                                onClick={importTemplate}
-                                className="flex items-center gap-2 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+                        </div>
+                        <div className="flex flex-wrap gap-4">
+                            {/* <button
+                                type="button"
+                                onClick={saveTemplate}
+                                disabled={fields.length === 0 || isSaving}
+                                className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                             >
-                                <Upload size={20} />
-                                Import Template
-                            </button>
-                            <DocumentTypeSelect
-                                value={documentType}
-                                onChange={setDocumentType}
-                            />
-
+                                {isSaving ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save size={20} />
+                                        Save Document
+                                    </>
+                                )}
+                            </button> */}
                             <button
-                                onClick={() => setDrawingMode(true)}
-                                disabled={!pdfUrl}
+                                type="button"
+                                onClick={handleSaveAndAddAnother}
+                                disabled={fields.length === 0 || isSavingAndAdding}
                                 className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                             >
-                                <Plus size={20} />
-                                Add Field
+                                {isSavingAndAdding ? (
+                                    <>
+                                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                                        Saving...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Plus size={20} />
+                                        Create Document
+                                    </>
+                                )}
                             </button>
-
-                            <button
+                            {/* <button
+                                type="button"
                                 onClick={() => setShowPreviewMode(!showPreviewMode)}
                                 className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 text-sm"
                             >
                                 <Eye size={16} />
                                 {showPreviewMode ? 'Edit Mode' : 'Preview Mode'}
+                            </button> */}
+                            <button
+                                type="button"
+                                onClick={() => setShowPDFViewer(true)}
+                                className="flex items-center gap-2 bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-800 text-sm"
+                            >
+                                <Eye size={16} />
+                                View PDF
                             </button>
-
-                            {pdfFile && (
-                                <span className="text-sm text-gray-600">
-                                    {pdfFile.name}
-                                </span>
-                            )}
-
-                            {drawingMode && (
-                                <div className="flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-lg">
-                                    <Settings size={16} />
-                                    <span className="text-sm font-medium">Drawing Mode Active</span>
-                                </div>
-                            )}
-
-                            {isLoadingTemplate && (
-                                <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg">
-                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
-                                    <span className="text-sm font-medium">Loading Template...</span>
-                                </div>
-                            )}
                         </div>
-                    </div>
-
-                    {/* Main Content */}
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* PDF Viewer */}
-                        <div className="lg:col-span-2">
-                            <PDFViewer
-                                pdfUrl={pdfUrl}
-                                fields={fields}
-                                setFields={setFields}
-                                currentField={currentField}
-                                setCurrentField={setCurrentField}
-                                showFieldModal={showFieldModal}
-                                setShowFieldModal={setShowFieldModal}
-                                drawingMode={drawingMode}
-                                setDrawingMode={setDrawingMode}
-                                showPreviewMode={showPreviewMode}
-                                previewValues={previewValues}
-                                setPreviewValues={setPreviewValues}
-                            />
-                        </div>
-
-                        {/* Field Management */}
-                        <div className="space-y-6">
-                            <FieldManager
-                                fields={fields}
-                                setFields={setFields}
-                                showPreviewMode={showPreviewMode}
-                                previewValues={previewValues}
-                                setPreviewValues={setPreviewValues}
-                                currentField={currentField}
-                                setCurrentField={setCurrentField}
-                                showFieldModal={showFieldModal}
-                                setShowFieldModal={setShowFieldModal}
-                                editingField={editingField}
-                                setEditingField={setEditingField}
-                            />
-
-                            {/* Actions */}
-                            <div className="space-y-3">
-                                <button
-                                    onClick={generateJsonTemplate}
-                                    disabled={fields.length === 0}
-                                    className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Save size={20} />
-                                    Generate Template
-                                </button>
-
-                                <button
-                                    onClick={() => setShowPreview(!showPreview)}
-                                    disabled={!jsonTemplate}
-                                    className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Eye size={20} />
-                                    {showPreview ? 'Hide' : 'Show'} JSON
-                                </button>
-
-                                <button
-                                    onClick={downloadTemplate}
-                                    disabled={!jsonTemplate}
-                                    className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Download size={20} />
-                                    Download Template
-                                </button>
-
-                                <button
-                                    onClick={downloadFilledPDF}
-                                    disabled={!pdfUrl || fields.length === 0}
-                                    className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Download size={20} />
-                                    Download Filled PDF
-                                </button>
+                        {drawingMode && (
+                            <div className="flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-lg">
+                                <Settings size={16} />
+                                <span className="text-sm font-medium">Drawing Mode Active</span>
                             </div>
+                        )}
+                        {isLoadingTemplate && (
+                            <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg">
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
+                                <span className="text-sm font-medium">Loading Template...</span>
+                            </div>
+                        )}
+                    </form>
+                    {/* Field Management and Actions */}
+                    <div className="mt-8 grid grid-cols-1 gap-6">
+                        <FieldManager
+                            fields={fields}
+                            setFields={setFields}
+                            showPreviewMode={showPreviewMode}
+                            previewValues={previewValues}
+                            setPreviewValues={setPreviewValues}
+                            currentField={currentField}
+                            setCurrentField={setCurrentField}
+                            showFieldModal={showFieldModal}
+                            setShowFieldModal={setShowFieldModal}
+                            editingField={editingField}
+                            setEditingField={setEditingField}
+                        />
+                        <div className="space-y-3">
+                            {/* <button
+                                onClick={generateJsonTemplate}
+                                disabled={fields.length === 0}
+                                className="w-full flex items-center justify-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Save size={20} />
+                                Generate Template
+                            </button>
+                            <button
+                                onClick={() => setShowPreview(!showPreview)}
+                                disabled={!jsonTemplate}
+                                className="w-full flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Eye size={20} />
+                                {showPreview ? 'Hide' : 'Show'} JSON
+                            </button>
+                            <button
+                                onClick={downloadTemplate}
+                                disabled={!jsonTemplate}
+                                className="w-full flex items-center justify-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Download size={20} />
+                                Download Template
+                            </button> */}
+                            <button
+                                onClick={downloadFilledPDF}
+                                disabled={!pdfUrl || fields.length === 0}
+                                className="w-full flex items-center justify-center gap-2 bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                            >
+                                <Download size={20} />
+                                Download Filled PDF
+                            </button>
                         </div>
                     </div>
-
+                    {/* PDF Viewer Dialog Modal */}
+                    <PDFViewerDialog
+                        open={showPDFViewer}
+                        onClose={() => setShowPDFViewer(false)}
+                        pdfUrl={pdfUrl}
+                        fields={fields}
+                        setFields={setFields}
+                        currentField={currentField}
+                        setCurrentField={setCurrentField}
+                        showFieldModal={showFieldModal}
+                        setShowFieldModal={setShowFieldModal}
+                        drawingMode={drawingMode}
+                        setDrawingMode={setDrawingMode}
+                        showPreviewMode={showPreviewMode}
+                        previewValues={previewValues}
+                        setPreviewValues={setPreviewValues}
+                    />
                     {/* JSON Preview */}
                     {showPreview && jsonTemplate && (
                         <div className="mt-6 border rounded-lg p-4">

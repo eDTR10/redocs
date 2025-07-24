@@ -1,7 +1,8 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
+import React from 'react';
+import ReactDOM from 'react-dom/client';
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
-
+import { DocumentTypeProvider } from './context/DocumentTypeContext';
+import './index.css';
 import './index.css'
 import { Suspense, lazy } from "react";
 
@@ -174,6 +175,8 @@ function wait(time: number) {
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RouterProvider router={router} />
-  </React.StrictMode>,
-)
+    <DocumentTypeProvider>
+      <RouterProvider router={router} />
+    </DocumentTypeProvider>
+  </React.StrictMode>
+);
