@@ -1,5 +1,5 @@
-import React from 'react';
-import { Trash2, Edit, Plus, Upload, X, File, Pen } from 'lucide-react';
+import React, { useState } from 'react';
+import { Trash2, Edit, Plus, Upload, X, File, Pen, Users, Check } from 'lucide-react';
 
 // Add to your Field interface
 export interface Field {
@@ -22,6 +22,7 @@ export interface Field {
   };
   groupConfig?: {
     fields: Field[];
+    additionalFields?: any[]; // For non-visual fields
   };
   style?: {
     fontSize: string;
@@ -69,6 +70,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   editingField,
   setEditingField
 }) => {
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [selectedFields, setSelectedFields] = useState<string[]>([]);
+  const [groupName, setGroupName] = useState('');
+  const [additionalFields, setAdditionalFields] = useState<any[]>([]);
+
   const getFieldColor = (fieldType: Field['type']) => {
     const colors = {
       text: { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.1)' },
@@ -80,7 +86,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
       textarea: { stroke: '#64748b', fill: 'rgba(100, 116, 139, 0.1)' },
       image: { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.1)' },
       list: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.1)' },
-      table: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' }
+      table: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' },
+      group: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' }
     };
     return colors[fieldType];
   };
@@ -124,7 +131,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
         data: []
       },
       groupConfig: {
-        fields: []
+        fields: [],
+        additionalFields: []
       },
       style: {
         fontSize: '12',
@@ -134,6 +142,64 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
         fontStyle: 'normal'
       }
     });
+  };
+
+  const createGroup = () => {
+    if (!groupName || selectedFields.length === 0) return;
+
+    const fieldsToGroup = fields.filter(field => selectedFields.includes(field.id));
+    const remainingFields = fields.filter(field => !selectedFields.includes(field.id));
+
+    const newGroup: Field = {
+      id: generateIdFromLabel(groupName),
+      label: groupName,
+      type: 'group',
+      required: false,
+      coordinates: null, // Groups don't have visual coordinates
+      page: 1,
+      groupConfig: {
+        fields: fieldsToGroup,
+        additionalFields: additionalFields
+      },
+      style: {
+        fontSize: '12',
+        color: '#000000',
+        fontFamily: 'Palatino, "Palatino Linotype", serif',
+        fontWeight: 'normal',
+        fontStyle: 'normal'
+      }
+    };
+
+    setFields([...remainingFields, newGroup]);
+    setShowGroupModal(false);
+    setSelectedFields([]);
+    setGroupName('');
+    setAdditionalFields([]);
+  };
+
+  const addAdditionalField = () => {
+    const newField = {
+      id: generateIdFromLabel(`additional_field_${additionalFields.length + 1}`),
+      label: `Additional Field ${additionalFields.length + 1}`,
+      type: 'text',
+      required: false,
+      options: []
+    };
+    setAdditionalFields([...additionalFields, newField]);
+  };
+
+  const updateAdditionalField = (index: number, updatedField: any) => {
+    const newFields = [...additionalFields];
+    newFields[index] = {
+      ...newFields[index],
+      ...updatedField,
+      id: updatedField.label ? generateIdFromLabel(updatedField.label) : newFields[index].id
+    };
+    setAdditionalFields(newFields);
+  };
+
+  const removeAdditionalField = (index: number) => {
+    setAdditionalFields(additionalFields.filter((_, i) => i !== index));
   };
 
   const addGroupField = () => {
@@ -253,7 +319,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             })}
           >
             <option value="">Select...</option>
-            {field.options.map((opt, i) => (
+            {field.options?.map((opt, i) => (
               <option key={i} value={opt}>{opt}</option>
             ))}
           </select>
@@ -509,10 +575,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
           <div className="border rounded p-3 bg-gray-50">
             <div className="font-medium text-gray-800 mb-3">{field.label}</div>
             
-            {/* Regular group fields */}
+            {/* Existing grouped fields (visible on PDF) */}
             <div className="space-y-3">
-              {field.groupConfig.fields.map((subField, index) => (
-                <div key={subField.id} className="space-y-1">
+              <div className="text-sm font-medium text-gray-600 mb-2">Visual Fields (shown on PDF):</div>
+              {field.groupConfig?.fields?.map((subField, index) => (
+                <div key={subField.id} className="space-y-1 bg-white p-2 rounded border">
                   <label className="text-sm font-medium text-gray-600">
                     {subField.label}
                     {subField.required && <span className="text-red-500 ml-1">*</span>}
@@ -547,6 +614,37 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       })}
                     />
                   )}
+
+                  {subField.type === 'email' && (
+                    <input
+                      type="email"
+                      className="w-full p-2 border rounded"
+                      placeholder="user@example.com"
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
+
+                  {subField.type === 'date' && (
+                    <input
+                      type="date"
+                      className="w-full p-2 border rounded"
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
                   
                   {subField.type === 'checkbox' && (
                     <div className="flex items-center gap-2">
@@ -564,21 +662,6 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       />
                       <span className="text-sm text-gray-600">Yes/No</span>
                     </div>
-                  )}
-                  
-                  {subField.type === 'textarea' && (
-                    <textarea
-                      className="w-full p-2 border rounded"
-                      rows={2}
-                      value={groupData[subField.id] || ''}
-                      onChange={(e) => setPreviewValues({
-                        ...previewValues,
-                        [field.id]: {
-                          ...groupData,
-                          [subField.id]: e.target.value
-                        }
-                      })}
-                    />
                   )}
                   
                   {subField.type === 'select' && (
@@ -599,111 +682,268 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       ))}
                     </select>
                   )}
+                  
+                  {subField.type === 'textarea' && (
+                    <textarea
+                      className="w-full p-2 border rounded"
+                      rows={2}
+                      value={groupData[subField.id] || ''}
+                      onChange={(e) => setPreviewValues({
+                        ...previewValues,
+                        [field.id]: {
+                          ...groupData,
+                          [subField.id]: e.target.value
+                        }
+                      })}
+                    />
+                  )}
+
+                  {subField.type === 'image' && (
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (event) => {
+                              setPreviewValues({
+                                ...previewValues,
+                                [field.id]: {
+                                  ...groupData,
+                                  [subField.id]: event.target?.result
+                                }
+                              });
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        className="hidden"
+                        id={`group-image-upload-${field.id}-${subField.id}`}
+                      />
+                      <div className="border rounded p-4 text-center">
+                        {groupData[subField.id] ? (
+                          <div className="relative group">
+                            <img
+                              src={groupData[subField.id]}
+                              alt="Preview"
+                              className="max-h-32 mx-auto"
+                            />
+                            <button
+                              onClick={() => setPreviewValues({
+                                ...previewValues,
+                                [field.id]: {
+                                  ...groupData,
+                                  [subField.id]: null
+                                }
+                              })}
+                              className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            >
+                              <X size={16} />
+                            </button>
+                          </div>
+                        ) : (
+                          <label
+                            htmlFor={`group-image-upload-${field.id}-${subField.id}`}
+                            className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                          >
+                            <Upload size={24} />
+                            <span className="text-sm mt-1">Upload Image</span>
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
             
-            {/* Dynamic list of additional fields */}
-            <div className="mt-4">
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-600">Additional Fields</span>
-                <button
-                  onClick={() => {
-                    const fieldCount = (groupData.group_fields || []).length;
-                    const newGroupFields = [...(groupData.group_fields || []), {}];
+            {/* Additional fields (non-visual) */}
+            {field.groupConfig?.additionalFields?.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <div className="text-sm font-medium text-gray-600 mb-2">Additional Fields (data only):</div>
+                {field.groupConfig.additionalFields.map((addField, index) => (
+                  <div key={addField.id} className="space-y-1 bg-blue-50 p-2 rounded border">
+                    <label className="text-sm font-medium text-gray-600">
+                      {addField.label}
+                      {addField.required && <span className="text-red-500 ml-1">*</span>}
+                    </label>
                     
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...groupData,
-                        group_fields: newGroupFields
-                      }
-                    });
-                  }}
-                  className="text-blue-600 hover:text-blue-800 text-sm flex items-center gap-1"
-                >
-                  <Plus size={14} />
-                  Add Item
-                </button>
-              </div>
-              
-              {(groupData.group_fields || []).map((item: any, itemIndex: number) => (
-                <div key={itemIndex} className="border rounded p-2 mb-2 bg-white">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-xs font-medium text-gray-500">Item {itemIndex + 1}</span>
-                    <button
-                      onClick={() => {
-                        const newGroupFields = (groupData.group_fields || []).filter((_: any, i: number) => i !== itemIndex);
-                        setPreviewValues({
+                    {addField.type === 'text' && (
+                      <input
+                        type="text"
+                        className="w-full p-2 border rounded"
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
                           ...previewValues,
                           [field.id]: {
                             ...groupData,
-                            group_fields: newGroupFields
+                            [addField.id]: e.target.value
                           }
-                        });
-                      }}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    {field.groupConfig.fields.map((subField, subIndex) => (
-                      <div key={subField.id} className="space-y-1">
-                        <label className="text-xs text-gray-500">{subField.label}</label>
-                        
-                        {subField.type === 'text' && (
-                          <input
-                            type="text"
-                            className="w-full p-1 border rounded text-sm"
-                            value={item[subField.id] || ''}
-                            onChange={(e) => {
-                              const newGroupFields = [...(groupData.group_fields || [])];
-                              newGroupFields[itemIndex] = {
-                                ...newGroupFields[itemIndex],
-                                [subField.id]: e.target.value
-                              };
-                              
-                              setPreviewValues({
-                                ...previewValues,
-                                [field.id]: {
-                                  ...groupData,
-                                  group_fields: newGroupFields
-                                }
-                              });
-                            }}
-                          />
-                        )}
-                        
-                        {subField.type === 'checkbox' && (
-                          <input
-                            type="checkbox"
-                            checked={item[subField.id] || false}
-                            onChange={(e) => {
-                              const newGroupFields = [...(groupData.group_fields || [])];
-                              newGroupFields[itemIndex] = {
-                                ...newGroupFields[itemIndex],
-                                [subField.id]: e.target.checked
-                              };
-                              
-                              setPreviewValues({
-                                ...previewValues,
-                                [field.id]: {
-                                  ...groupData,
-                                  group_fields: newGroupFields
-                                }
-                              });
-                            }}
-                            className="w-4 h-4"
-                          />
-                        )}
+                        })}
+                      />
+                    )}
+                    
+                    {addField.type === 'number' && (
+                      <input
+                        type="number"
+                        className="w-full p-2 border rounded"
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [addField.id]: e.target.value
+                          }
+                        })}
+                      />
+                    )}
+
+                    {addField.type === 'email' && (
+                      <input
+                        type="email"
+                        className="w-full p-2 border rounded"
+                        placeholder="user@example.com"
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [addField.id]: e.target.value
+                          }
+                        })}
+                      />
+                    )}
+
+                    {addField.type === 'date' && (
+                      <input
+                        type="date"
+                        className="w-full p-2 border rounded"
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [addField.id]: e.target.value
+                          }
+                        })}
+                      />
+                    )}
+
+                    {addField.type === 'textarea' && (
+                      <textarea
+                        className="w-full p-2 border rounded"
+                        rows={2}
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [addField.id]: e.target.value
+                          }
+                        })}
+                      />
+                    )}
+                    
+                    {addField.type === 'select' && (
+                      <select
+                        className="w-full p-2 border rounded"
+                        value={groupData[addField.id] || ''}
+                        onChange={(e) => setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [addField.id]: e.target.value
+                          }
+                        })}
+                      >
+                        <option value="">Select...</option>
+                        {addField.options?.map((opt, i) => (
+                          <option key={i} value={opt}>{opt}</option>
+                        ))}
+                      </select>
+                    )}
+                    
+                    {addField.type === 'checkbox' && (
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={groupData[addField.id] || false}
+                          onChange={(e) => setPreviewValues({
+                            ...previewValues,
+                            [field.id]: {
+                              ...groupData,
+                              [addField.id]: e.target.checked
+                            }
+                          })}
+                          className="w-4 h-4"
+                        />
+                        <span className="text-sm text-gray-600">Yes/No</span>
                       </div>
-                    ))}
+                    )}
+
+                    {addField.type === 'image' && (
+                      <div className="space-y-2">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (event) => {
+                                setPreviewValues({
+                                  ...previewValues,
+                                  [field.id]: {
+                                    ...groupData,
+                                    [addField.id]: event.target?.result
+                                  }
+                                });
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                          className="hidden"
+                          id={`additional-image-upload-${field.id}-${addField.id}`}
+                        />
+                        <div className="border rounded p-4 text-center">
+                          {groupData[addField.id] ? (
+                            <div className="relative group">
+                              <img
+                                src={groupData[addField.id]}
+                                alt="Preview"
+                                className="max-h-32 mx-auto"
+                              />
+                              <button
+                                onClick={() => setPreviewValues({
+                                  ...previewValues,
+                                  [field.id]: {
+                                    ...groupData,
+                                    [addField.id]: null
+                                  }
+                                })}
+                                className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <X size={16} />
+                              </button>
+                            </div>
+                          ) : (
+                            <label
+                              htmlFor={`additional-image-upload-${field.id}-${addField.id}`}
+                              className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                            >
+                              <Upload size={24} />
+                              <span className="text-sm mt-1">Upload Image</span>
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         );
 
@@ -716,7 +956,19 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
     <>
       {/* Fields List */}
       <div className="border rounded-lg p-4">
-        <h3 className="text-lg font-semibold mb-4">Form Fields ({fields.length})</h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold">Form Fields ({fields.length})</h3>
+          {!showPreviewMode && fields.length > 1 && (
+            <button
+              onClick={() => setShowGroupModal(true)}
+              className="flex items-center gap-2 bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 text-sm"
+            >
+              <Users size={16} />
+              Create Group
+            </button>
+          )}
+        </div>
+        
         {fields.map(field => (
           <div key={field.id} className="mb-4 hover:bg-slate-400/10 p-3 rounded-sm cursor-pointer last:mb-0">
             <div className="flex justify-between items-start mb-2">
@@ -731,6 +983,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 <span className="font-medium text-sm">
                   {field.label}
                   {field.required && <span className="text-red-500 ml-1">*</span>}
+                  {field.type === 'group' && (
+                    <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                      GROUP ({field.groupConfig?.fields?.length || 0} visual + {field.groupConfig?.additionalFields?.length || 0} data)
+                    </span>
+                  )}
                 </span>
               </div>
               {!showPreviewMode && (
@@ -757,7 +1014,15 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             ) : (
               <div className="text-xs text-gray-500">
                 {field.type}
-                {field.type === 'table' && ` (${field.tableConfig.columns.length} columns)`}
+                {field.type === 'table' && ` (${field.tableConfig?.columns?.length || 0} columns)`}
+                {field.type === 'group' && field.groupConfig && (
+                  <div className="mt-1">
+                    <div>Visual fields: {field.groupConfig.fields?.map(f => f.label).join(', ')}</div>
+                    {field.groupConfig.additionalFields?.length > 0 && (
+                      <div>Data fields: {field.groupConfig.additionalFields.map(f => f.label).join(', ')}</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -768,6 +1033,186 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
           </div>
         )}
       </div>
+
+      {/* Group Creation Modal */}
+      {showGroupModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Create Field Group</h3>
+              <button
+                onClick={() => {
+                  setShowGroupModal(false);
+                  setSelectedFields([]);
+                  setGroupName('');
+                  setAdditionalFields([]);
+                }}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X size={20} />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Group Name
+                </label>
+                <input
+                  type="text"
+                  value={groupName}
+                  onChange={(e) => setGroupName(e.target.value)}
+                  className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Enter group name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Select Fields to Group (these will be visible on PDF)
+                </label>
+                <div className="space-y-2 max-h-40 overflow-y-auto">
+                  {fields.filter(f => f.type !== 'group').map(field => (
+                    <div key={field.id} className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id={`field-${field.id}`}
+                        checked={selectedFields.includes(field.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedFields([...selectedFields, field.id]);
+                          } else {
+                            setSelectedFields(selectedFields.filter(id => id !== field.id));
+                          }
+                        }}
+                        className="w-4 h-4"
+                      />
+                      <label htmlFor={`field-${field.id}`} className="flex items-center gap-2 cursor-pointer">
+                        <span 
+                          className="w-3 h-3 rounded-sm border-2"
+                          style={{ 
+                            borderColor: getFieldColor(field.type).stroke,
+                            backgroundColor: getFieldColor(field.type).fill
+                          }}
+                        />
+                        <span className="text-sm">{field.label} ({field.type})</span>
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="flex justify-between items-center mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Additional Data Fields (not visible on PDF)
+                  </label>
+                  <button
+                    onClick={addAdditionalField}
+                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                  >
+                    <Plus size={16} />
+                    Add Field
+                  </button>
+                </div>
+                
+                <div className="space-y-3 max-h-60 overflow-y-auto">
+                  {additionalFields.map((field, index) => (
+                    <div key={index} className="border rounded p-3 bg-blue-50">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-sm font-medium">Additional Field {index + 1}</span>
+                        <button
+                          onClick={() => removeAdditionalField(index)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-600">Label</label>
+                          <input
+                            type="text"
+                            value={field.label}
+                            onChange={(e) => updateAdditionalField(index, { label: e.target.value })}
+                            className="w-full p-2 border rounded"
+                            placeholder="Field label"
+                          />
+                        </div>
+                        
+                        <div>
+                          <label className="text-xs text-gray-600">Type</label>
+                          <select
+                            value={field.type}
+                            onChange={(e) => updateAdditionalField(index, { type: e.target.value })}
+                            className="w-full p-2 border rounded"
+                          >
+                            <option value="text">Text</option>
+                            <option value="number">Number</option>
+                            <option value="email">Email</option>
+                            <option value="date">Date</option>
+                            <option value="checkbox">Checkbox</option>
+                            <option value="select">Select</option>
+                            <option value="textarea">Textarea</option>
+                            <option value="image">Image</option>
+                          </select>
+                        </div>
+                      </div>
+                      
+                      {field.type === 'select' && (
+                        <div className="mt-2">
+                          <label className="text-xs text-gray-600">Options (comma-separated)</label>
+                          <input
+                            type="text"
+                            value={field.options?.join(', ') || ''}
+                            onChange={(e) => updateAdditionalField(index, { 
+                              options: e.target.value.split(',').map(opt => opt.trim()).filter(opt => opt) 
+                            })}
+                            className="w-full p-2 border rounded"
+                            placeholder="Option 1, Option 2, Option 3"
+                          />
+                        </div>
+                      )}
+                      
+                      <div className="mt-2 flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={field.required}
+                          onChange={(e) => updateAdditionalField(index, { required: e.target.checked })}
+                          className="mr-2"
+                        />
+                        <label className="text-xs text-gray-600">Required</label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 mt-6">
+              <button
+                onClick={() => {
+                  setShowGroupModal(false);
+                  setSelectedFields([]);
+                  setGroupName('');
+                  setAdditionalFields([]);
+                }}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createGroup}
+                disabled={!groupName || selectedFields.length === 0}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+              >
+                Create Group
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Field Creation Modal */}
       {showFieldModal && (
@@ -840,7 +1285,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                     Group Fields Configuration
                   </label>
                   <div className="space-y-3">
-                    {currentField.groupConfig.fields.map((groupField, index) => (
+                    {currentField.groupConfig?.fields?.map((groupField, index) => (
                       <div key={index} className="border rounded p-3 bg-gray-50">
                         <div className="flex justify-between items-center mb-2">
                           <span className="text-sm font-medium">Field {index + 1}</span>
@@ -873,9 +1318,12 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             >
                               <option value="text">Text</option>
                               <option value="number">Number</option>
+                              <option value="email">Email</option>
+                              <option value="date">Date</option>
                               <option value="checkbox">Checkbox</option>
                               <option value="select">Select</option>
                               <option value="textarea">Textarea</option>
+                              <option value="image">Image</option>
                             </select>
                           </div>
                         </div>

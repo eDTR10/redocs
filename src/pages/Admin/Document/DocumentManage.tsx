@@ -4,6 +4,8 @@ import { PDFViewer } from './PDFViewer';
 import { FieldManager } from './FieldManager';
 import { generatePDFWithFields } from './pdfGenerator';
 import Template1 from '/PR.pdf';
+import axios from './../../../plugin/axios';
+import Swal from 'sweetalert2';
 
 function DocumentManage() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -47,24 +49,47 @@ function DocumentManage() {
   const [drawingMode, setDrawingMode] = useState(false);
   const [documentName, setDocumentName] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState<string>('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isLoadingTemplate, setIsLoadingTemplate] = useState(false);
+
+  const [templates, setTemplate] = useState<any[]>([]);
+
+    const fetchTemplates = async () => {
+      try {
+        const response = await axios.get('/template/all/');
+        setTemplate(response.data);
+        console.log('Templates fetched:', response.data);
+      } catch (error) {
+        console.error('Error fetching templates:', error);
+      }
+    };
+
+  useEffect(() => {
+    // Fetch templates from the server
+  
+
+    fetchTemplates();
+  }, []);
 
   const TEMPLATES = [
     { id: 'template1', name: 'Purchase Request Form 1', path: Template1 },
   ];
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file && file.type === 'application/pdf') {
-      setPdfFile(file);
-      const url = URL.createObjectURL(file);
-      setPdfUrl(url);
-    }
-  };
+  const removeRedocsPrefix = (filePath: string) => {
+  if (filePath && filePath.startsWith('/redocs')) {
+    return filePath.replace('/redocs', '');
+  }
+  return filePath;
+};
+
+
 
   const handleTemplateSelect = (templateId: string) => {
     const template = TEMPLATES.find(t => t.id === templateId);
     if (template) {
       setSelectedTemplate(template.path);
+
+  
       setDocumentName(template.name);
       fetch(template.path)
         .then(res => res.blob())
@@ -74,6 +99,241 @@ function DocumentManage() {
           const url = URL.createObjectURL(file);
           setPdfUrl(url);
         });
+    }
+  };
+
+  const handleServerTemplateSelect = async (templateId: string) => {
+  if (!templateId) return;
+  
+  setIsLoadingTemplate(true);
+  try {
+    const template = templates.find(t => t.id.toString() === templateId);
+    if (template) {
+      // Set document name
+      setDocumentName(template.name);
+      
+      // Clean the file path and construct the correct URL
+      let pdfUrl = template.file;
+      
+      // Remove /redocs prefix if it exists
+      if (pdfUrl.startsWith('/redocs')) {
+        pdfUrl = pdfUrl.replace('/redocs', '');
+      }
+      
+      // For files in the public folder, don't add the API URL
+      if (pdfUrl.startsWith('/') && pdfUrl.includes('.pdf')) {
+        // This is likely a static file in the public folder
+        pdfUrl = pdfUrl; // Keep as is, browser will resolve relative to domain
+      } else {
+        // This is an API endpoint
+        pdfUrl = `${import.meta.env.VITE_API_URL || 'http://localhost:8000'}${pdfUrl}`;
+      }
+      
+      console.log('Loading PDF from:', pdfUrl);
+      
+      // Load the PDF file
+      const pdfResponse = await fetch(pdfUrl);
+      if (!pdfResponse.ok) {
+        throw new Error(`Failed to load PDF file: ${pdfResponse.status} ${pdfResponse.statusText}`);
+      }
+      
+      const pdfBlob = await pdfResponse.blob();
+      const file = new File([pdfBlob], template.name + '.pdf', { type: 'application/pdf' });
+      setPdfFile(file);
+      const url = URL.createObjectURL(file);
+      setPdfUrl(url);
+      setSelectedTemplate(template.file);
+      
+      // Load the fields from the template - the structure is directly in template.body
+      if (template.body && template.body.fields) {
+        const mappedFields = template.body.fields.map(field => ({
+          ...field,
+          tableConfig: field.tableConfig || {
+            rows: 1,
+            columns: [],
+            data: []
+          },
+          listConfig: field.listConfig || {
+            minItems: 1,
+            maxItems: 10,
+            columns: []
+          },
+          groupConfig: field.groupConfig || {
+            fields: []
+          }
+        }));
+        
+        setFields(mappedFields);
+        
+        // If there are schema values, set them as preview values
+        if (template.body.schema) {
+          const initialValues = {};
+          Object.keys(template.body.schema).forEach(key => {
+            const schemaField = template.body.schema[key];
+            if (schemaField.type === 'checkbox') {
+              initialValues[key] = false;
+            } else {
+              initialValues[key] = '';
+            }
+          });
+          setPreviewValues(initialValues);
+        }
+      }
+      
+      await Swal.fire({
+        icon: 'success',
+        title: 'Template Loaded',
+        text: `Template "${template.name}" has been loaded successfully.`,
+        timer: 2000,
+        showConfirmButton: false,
+      });
+    }
+  } catch (error) {
+    console.error('Error loading template:', error);
+    await Swal.fire({
+      icon: 'error',
+      title: 'Load Failed',
+      text: `There was an error loading the template: ${error.message}`,
+      showConfirmButton: true,
+      confirmButtonText: 'OK',
+    });
+  } finally {
+    setIsLoadingTemplate(false);
+  }
+};
+
+  const saveTemplate = async () => {
+    setIsSaving(true);
+    
+    try {
+      const template = {
+        document: {
+          name: documentName || (pdfFile ? pdfFile.name : 'untitled.pdf'),
+          documentUrl: removeRedocsPrefix(selectedTemplate) || (pdfFile ? URL.createObjectURL(pdfFile) : ''),
+          created: new Date().toISOString()
+        },
+        fields: fields.map(field => {
+          const baseField: any = {
+            id: field.id,
+            label: field.label,
+            type: field.type,
+            required: field.required,
+            coordinates: field.coordinates,
+            page: field.page,
+            style: {
+              fontSize: field.style?.fontSize || '12',
+              color: field.style?.color || '#000000',
+              fontFamily: field.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+              fontWeight: field.style?.fontWeight || 'normal',
+              fontStyle: field.style?.fontStyle || 'normal'
+            }
+          };
+
+          // Add type-specific properties
+          if (field.type === 'select' && field.options) {
+            baseField.options = field.options;
+          }
+
+          if (field.type === 'checkbox') {
+            baseField.value = false;
+          }
+
+          if (field.type === 'table' && field.tableConfig) {
+            baseField.tableConfig = {
+              rows: field.tableConfig.rows,
+              expandable: true,
+              columns: field.tableConfig.columns.map(col => ({
+                label: col.label,
+                width: col.width,
+                type: col.type || 'text'
+              })),
+              data: Array(field.tableConfig.rows).fill(
+                Array(field.tableConfig.columns.length).fill('')
+              ),
+              _footer: "xxx nothing follows xxx"
+            };
+          }
+
+          if (field.type === 'group' && field.groupConfig) {
+            baseField.groupConfig = {
+              fields: field.groupConfig.fields || [],
+              additionalFields: field.groupConfig.additionalFields || []
+            };
+          }
+
+          if (field.type === 'list' && field.listConfig) {
+            baseField.listConfig = field.listConfig;
+          }
+
+          return baseField;
+        }),
+        schema: fields.reduce((acc: Record<string, any>, field) => {
+          const schemaField: any = {
+            type: field.type,
+            required: field.required,
+            label: field.label
+          };
+
+          if (field.type === 'table' && field.tableConfig) {
+            schemaField.tableConfig = {
+              ...field.tableConfig,
+              _footer: "xxx nothing follows xxx"
+            };
+          }
+
+          if (field.type === 'select' && field.options) {
+            schemaField.options = field.options;
+          }
+
+          if (field.type === 'group' && field.groupConfig) {
+            schemaField.groupConfig = {
+              fields: field.groupConfig.fields || [],
+              additionalFields: field.groupConfig.additionalFields || []
+            };
+          }
+
+          if (field.type === 'list' && field.listConfig) {
+            schemaField.listConfig = field.listConfig;
+          }
+
+          acc[field.id] = schemaField;
+          return acc;
+        }, {})
+      };
+
+      const response = await axios.post('/template/all/', { 
+        "name": documentName, 
+        "body": template,
+        "file": selectedTemplate || (pdfFile ? URL.createObjectURL(pdfFile) : '') 
+      });
+
+      fetchTemplates(); // Refresh templates after saving
+
+      await Swal.fire({
+        icon: 'success',
+        title: 'Template Saved',
+        text: 'Your template has been saved successfully.',
+        timer: 2000,
+        showConfirmButton: false,
+      });
+      
+      // Refresh the templates list
+      const templatesResponse = await axios.get('/template/all/');
+      setTemplate(templatesResponse.data);
+      
+      setFields([]); // Clear fields after saving
+      console.log('Fields saved successfully:', response.data);
+    } catch (error) {
+      console.error('Error saving fields:', error);
+      await Swal.fire({
+        icon: 'error',
+        title: 'Save Failed',
+        text: 'There was an error saving your template. Please try again.',
+        showConfirmButton: true,
+        confirmButtonText: 'OK',
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -127,7 +387,10 @@ function DocumentManage() {
         }
 
         if (field.type === 'group' && field.groupConfig) {
-          baseField.groupConfig = field.groupConfig;
+          baseField.groupConfig = {
+            fields: field.groupConfig.fields || [],
+            additionalFields: field.groupConfig.additionalFields || []
+          };
         }
 
         if (field.type === 'list' && field.listConfig) {
@@ -155,7 +418,10 @@ function DocumentManage() {
         }
 
         if (field.type === 'group' && field.groupConfig) {
-          schemaField.groupConfig = field.groupConfig;
+          schemaField.groupConfig = {
+            fields: field.groupConfig.fields || [],
+            additionalFields: field.groupConfig.additionalFields || []
+          };
         }
 
         if (field.type === 'list' && field.listConfig) {
@@ -166,6 +432,9 @@ function DocumentManage() {
         return acc;
       }, {})
     };
+
+
+
 
     const jsonString = JSON.stringify(template, null, 2);
     setJsonTemplate(jsonString);
@@ -263,7 +532,32 @@ function DocumentManage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
+
+          <div className=' flex justify-between '>
+            <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
+
+            <button
+              onClick={saveTemplate}
+              disabled={fields.length === 0 || isSaving}
+              className="flex items-center h-full justify-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSaving ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save size={20} />
+                  Save Document
+                </>
+              )}
+            </button>
+
+          </div>
+          
+
+          
 
           {/* File Upload Section */}
           <div className="mb-6">
@@ -273,9 +567,25 @@ function DocumentManage() {
                 className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                 defaultValue=""
               >
-                <option value="" disabled>Select Template</option>
+                <option value="" disabled>Select Local Template</option>
                 {TEMPLATES.map(template => (
                   <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </select>
+
+              <select
+                onChange={(e) => handleServerTemplateSelect(e.target.value)}
+                disabled={isLoadingTemplate}
+                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white disabled:bg-gray-100"
+                defaultValue=""
+              >
+                <option value="" disabled>
+                  {isLoadingTemplate ? 'Loading Templates...' : 'Select Server Template'}
+                </option>
+                {templates.map(template => (
+                  <option key={template.id} value={template.id.toString()}>
                     {template.name}
                   </option>
                 ))}
@@ -325,6 +635,13 @@ function DocumentManage() {
                 <div className="flex items-center gap-2 bg-yellow-100 text-yellow-800 px-3 py-1 rounded-lg">
                   <Settings size={16} />
                   <span className="text-sm font-medium">Drawing Mode Active</span>
+                </div>
+              )}
+
+              {isLoadingTemplate && (
+                <div className="flex items-center gap-2 bg-blue-100 text-blue-800 px-3 py-1 rounded-lg">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-800"></div>
+                  <span className="text-sm font-medium">Loading Template...</span>
                 </div>
               )}
             </div>
