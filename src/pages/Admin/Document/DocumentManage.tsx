@@ -45,6 +45,8 @@ function DocumentManage() {
   const [showPreviewMode, setShowPreviewMode] = useState(false);
   const [previewValues, setPreviewValues] = useState({});
   const [drawingMode, setDrawingMode] = useState(false);
+  const [documentName, setDocumentName] = useState('');
+  const [selectedTemplate, setSelectedTemplate] = useState<string>('');
 
   const TEMPLATES = [
     { id: 'template1', name: 'Purchase Request Form 1', path: Template1 },
@@ -62,6 +64,8 @@ function DocumentManage() {
   const handleTemplateSelect = (templateId: string) => {
     const template = TEMPLATES.find(t => t.id === templateId);
     if (template) {
+      setSelectedTemplate(template.path);
+      setDocumentName(template.name);
       fetch(template.path)
         .then(res => res.blob())
         .then(blob => {
@@ -76,19 +80,38 @@ function DocumentManage() {
   const generateJsonTemplate = () => {
     const template = {
       document: {
-        name: pdfFile ? pdfFile.name : 'untitled.pdf',
-        version: '1.0',
+        name: documentName || (pdfFile ? pdfFile.name : 'untitled.pdf'),
+        documentUrl: selectedTemplate || (pdfFile ? URL.createObjectURL(pdfFile) : ''),
         created: new Date().toISOString()
       },
-      fields: fields.map(field => ({
-        id: field.id,
-        label: field.label,
-        type: field.type,
-        required: field.required,
-        ...(field.type === 'select' && { options: field.options }),
-        ...(field.type === 'checkbox' && { value: false }),
-        ...(field.type === 'table' && { 
-          tableConfig: {
+      fields: fields.map(field => {
+        const baseField: any = {
+          id: field.id,
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          coordinates: field.coordinates,
+          page: field.page,
+          style: {
+            fontSize: field.style?.fontSize || '12',
+            color: field.style?.color || '#000000',
+            fontFamily: field.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+            fontWeight: field.style?.fontWeight || 'normal',
+            fontStyle: field.style?.fontStyle || 'normal'
+          }
+        };
+
+        // Add type-specific properties
+        if (field.type === 'select' && field.options) {
+          baseField.options = field.options;
+        }
+
+        if (field.type === 'checkbox') {
+          baseField.value = false;
+        }
+
+        if (field.type === 'table' && field.tableConfig) {
+          baseField.tableConfig = {
             rows: field.tableConfig.rows,
             expandable: true,
             columns: field.tableConfig.columns.map(col => ({
@@ -98,33 +121,50 @@ function DocumentManage() {
             })),
             data: Array(field.tableConfig.rows).fill(
               Array(field.tableConfig.columns.length).fill('')
-            )
-          }
-        }),
-        coordinates: field.coordinates,
-        page: field.page,
-        style: {
-          fontSize: field.style?.fontSize || '12',
-          color: field.style?.color || '#000000',
-          fontFamily: field.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
-          fontWeight: field.style?.fontWeight || 'normal',
-          fontStyle: field.style?.fontStyle || 'normal'
+            ),
+            _footer: "xxx nothing follows xxx"
+          };
         }
-      })),
+
+        if (field.type === 'group' && field.groupConfig) {
+          baseField.groupConfig = field.groupConfig;
+        }
+
+        if (field.type === 'list' && field.listConfig) {
+          baseField.listConfig = field.listConfig;
+        }
+
+        return baseField;
+      }),
       schema: fields.reduce((acc: Record<string, any>, field) => {
-        acc[field.id] = {
+        const schemaField: any = {
           type: field.type,
           required: field.required,
-          label: field.label,
-          ...(field.type === 'table' && { tableConfig: field.tableConfig })
+          label: field.label
         };
+
+        if (field.type === 'table' && field.tableConfig) {
+          schemaField.tableConfig = {
+            ...field.tableConfig,
+            _footer: "xxx nothing follows xxx"
+          };
+        }
+
+        if (field.type === 'select' && field.options) {
+          schemaField.options = field.options;
+        }
+
+        if (field.type === 'group' && field.groupConfig) {
+          schemaField.groupConfig = field.groupConfig;
+        }
+
+        if (field.type === 'list' && field.listConfig) {
+          schemaField.listConfig = field.listConfig;
+        }
+
+        acc[field.id] = schemaField;
         return acc;
-      }, {}),
-      _metadata: {
-        generated: new Date().toISOString(),
-        version: "1.0.0"
-      },
-      _footer: "xxx nothing follows xxx"
+      }, {})
     };
 
     const jsonString = JSON.stringify(template, null, 2);
@@ -241,7 +281,14 @@ function DocumentManage() {
                 ))}
               </select>
 
-            
+              {/* Document Name Input */}
+              <input
+                type="text"
+                value={documentName}
+                onChange={(e) => setDocumentName(e.target.value)}
+                placeholder="Enter document name"
+                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white min-w-[200px]"
+              />
 
               <button
                 onClick={importTemplate}
