@@ -1,182 +1,230 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import ReactDOM from 'react-dom/client';
 import { Navigate, RouterProvider, createBrowserRouter } from "react-router-dom";
-import { DocumentTypeProvider } from './context/DocumentTypeContext';
-import './index.css';
+
 import './index.css'
-import { Suspense, lazy } from "react";
+
 
 import NotFound from "./screens/notFound";
 import Loader from './components/loader/loader.tsx';
-import UserDashboard from './pages/User/Dashboard/UserDashboard.tsx';
 import LoaderPage from './components/loader/loaderPage.tsx';
+import UserDashboard from './pages/User/Dashboard/UserDashboard.tsx';
 
-const UserManage = lazy(() =>
-  wait(1300).then(() => import("./pages/Admin/UserManagement.tsx"))
-);
+// Lazy imports with artificial delay
+function wait(time: number) {
+  return new Promise((resolve) => setTimeout(resolve, time));
+}
 
-const Page2 = lazy(() =>
-  wait(1300).then(() => import("./screens/page2.tsx"))
-);
+// const Page1 = lazy(() => 
+//   wait(1300).then(() => import("./pages/Admin/UserManagement.tsx")
+// ));
 
-const AdminDashboard = lazy(() =>
-  wait(1300).then(() => import("./pages/Admin/AdminDashboard.tsx"))
-);
+const AdminPerRole = lazy(() => 
+  wait(1300).then(() => import("./components/adminPerRole/dashboard/Cards.tsx")
+));
 
-const UserMainContainer = lazy(() =>
-  wait(1300).then(() => import("./pages/User/UserMainContainer.tsx"))
-);
+const Tracking = lazy(() => 
+  wait(1300).then(() => import("./components/adminPerRole/tracking/Tracking.tsx")
+));
+
+const AdminDocument = lazy(() => 
+  wait(1300).then(() => import("./components/adminPerRole/documents/Document.tsx")
+));
+
+const Dashboard = lazy(() => 
+  wait(1300).then(() => import("./pages/AdminPerRole/Dashboard.tsx")
+));
+
+const UserManage = lazy(() => 
+  wait(1300).then(() => import("./pages/Admin/UserManagement.tsx")
+));
+
+const Page2 = lazy(() => 
+  wait(1300).then(() => import("./screens/page2.tsx")
+));
+
+const AdminDashboard = lazy(() => 
+  wait(1300).then(() => import("./pages/Admin/AdminDashboard.tsx")
+));
+
+const UserMainContainer = lazy(() => 
+  wait(1300).then(() => import("./pages/User/UserMainContainer.tsx")
+));
 
 const DocumentManage = lazy(() =>
   wait(1300).then(() => import("./pages/Admin/Document/DocumentManage.tsx"))
 );
 
-const FormFiller = lazy(() =>
-  wait(1300).then(() => import("./pages/Admin/ReadDocument.tsx"))
-);
+const FormFiller = lazy(() => 
+  wait(1300).then(() => import("./pages/Admin/ReadDocument.tsx")
+));
+const Login = lazy(() => 
+  wait(1300).then(() => import("./pages/Auth/Login.tsx")
+));
 
+const CreateDocument = lazy(() => 
+  wait(1300).then(() => import("./pages/User/DocumentManagement/CreateDocument/CreateDocument.tsx")
+));
 
+const DocumentTrack = lazy(() => 
+  wait(1300).then(() => import("./pages/User/DocumentManagement/DocumentTrack/DocumentTrack.tsx")
+));
 
+const Settings = lazy(() => 
+  wait(1300).then(() => import("./pages/User/Settings/Settings.tsx")
+));
 
-
-const Login = lazy(() =>
-  wait(1300).then(() => import("./pages/Auth/Login.tsx"))
-);
-
-const CreateDocument = lazy(() =>
-  wait(1300).then(() => import("./pages/User/DocumentManagement/CreateDocument/CreateDocument.tsx"))
-);
-
-
-
-const DocumentTrack = lazy(() =>
-  wait(1300).then(() => import("./pages/User/DocumentManagement/DocumentTrack/DocumentTrack.tsx"))
-);
-
-const Settings = lazy(() =>
-  wait(1300).then(() => import("./pages/User/Settings/Settings.tsx"))
-);
-
-const MyDocuments = lazy(() =>
-  wait(1300).then(() => import("./pages/User/DocumentManagement/MyDocuments/MyDocuments.tsx"))
-);
+const MyDocuments = lazy(() => 
+  wait(1300).then(() => import("./pages/User/DocumentManagement/MyDocuments/MyDocuments.tsx")
+));
 
 const router = createBrowserRouter([
+  // Login route
   {
-    path: "/redocs",
-    element: <>
+    path: '/redocs',
+    element: (
       <Suspense fallback={<Loader />}>
         <Login />
       </Suspense>
-    </>,
+    ),
   },
+  // User routes
   {
-    path: "/redocs/user",
-    element: <UserMainContainer />,
+    path: '/redocs/user',
+    element: (
+      <Suspense fallback={<Loader />}>
+        <UserMainContainer />
+      </Suspense>
+    ),
     children: [
+      { index: true, element: <Navigate to="/redocs/user/dashboard" replace /> },
       {
-        path: "/redocs/user",
-        element: <Navigate to="/redocs/user/dashboard" />,
-      },
-      {
-        path: "/redocs/user/dashboard",
+        path: "dashboard",
         element: <UserDashboard />,
       },
       {
-        path: "/redocs/user/documents",
-        element: <>
+        path: "documents",
+        element: (
           <Suspense fallback={<Loader />}>
             <MyDocuments />
           </Suspense>
-        </>,
+        ),
       },
       {
-        path: "/redocs/user/documents/create",
-        element: <>
+        path: "documents/create",
+        element: (
           <Suspense fallback={<Loader />}>
             <CreateDocument />
           </Suspense>
-        </>,
+        ),
       },
       {
-        path: "/redocs/user/documents/track",
-        element: <>
+        path: "documents/track",
+        element: (
           <Suspense fallback={<Loader />}>
             <DocumentTrack />
           </Suspense>
-        </>,
+        ),
       },
       {
-        path: "/redocs/user/settings",
-        element: <>
+        path: "settings",
+        element: (
           <Suspense fallback={<Loader />}>
             <Settings />
           </Suspense>
-        </>,
+        ),
       },
       {
-        path: "/redocs/user/page2",
-        element: <Page2 />,
-      },
-    ]
-  },
-  {
-    path: "/redocs/admin",
-    element: <AdminDashboard />,
-    children: [
-      {
-        path: "/redocs/admin",
-        element: <Navigate to="/redocs/admin/user" />,
-      },
-      {
-        path: "/redocs/admin/user",
-        element: <>
-          <Suspense fallback={<LoaderPage />}>
-            <UserManage />
+        path: "page2",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <Page2 />
           </Suspense>
-        </>,
-      }
-
-      ,
-      {
-        path: "/redocs/admin/document",
-        element: <>
-          <Suspense fallback={<LoaderPage />}>
-            <DocumentManage />
-          </Suspense>
-        </>,
-      },
-
-      {
-        path: "/redocs/admin/test",
-        element: <>
-          <Suspense fallback={<LoaderPage />}>
-            <FormFiller />
-          </Suspense>
-        </>,
-      },
-
-
-
-
-      {
-        path: "*",
-        element: <NotFound />,
+        ),
       },
     ],
   },
+  // Admin routes
+  {
+    path: '/redocs/admin',
+    element: (
+      <Suspense fallback={<Loader />}>
+        <AdminDashboard />
+      </Suspense>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/redocs/admin/user" replace /> },
+      {
+        path: "user",
+        element: (
+          <Suspense fallback={<LoaderPage />}>
+            <UserManage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "document",
+        element: (
+          <Suspense fallback={<LoaderPage />}>
+            <DocumentManage />
+          </Suspense>
+        ),
+      },
+      {
+        path: "test",
+        element: (
+          <Suspense fallback={<LoaderPage />}>
+            <FormFiller />
+          </Suspense>
+        ),
+      },
+    ],
+  },
+  // AdminPerRole routes
+  {
+    path: '/redocs/adminRole',
+    element: (
+      <Suspense fallback={<Loader />}>
+        <Dashboard />
+      </Suspense>
+    ),
+    children: [
+      { index: true, element: <Navigate to="/redocs/adminRole/dashboard" replace /> },
+      {
+        path: "dashboard",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <AdminPerRole />
+          </Suspense>
+        ),
+      },
+      {
+        path: "documents",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <AdminDocument />
+          </Suspense>
+        ),
+      },
+      {
+        path: "tracking",
+        element: (
+          <Suspense fallback={<Loader />}>
+            <Tracking />
+          </Suspense>
+        ),
+      },
+    ],
+  },
+  // 404 Not Found
+  {
+    path: '*',
+    element: <NotFound />,
+  },
 ]);
-
-function wait(time: number) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, time);
-  });
-}
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <DocumentTypeProvider>
-      <RouterProvider router={router} />
-    </DocumentTypeProvider>
-  </React.StrictMode>
-);
+    <RouterProvider router={router} />
+  </React.StrictMode>,
+)

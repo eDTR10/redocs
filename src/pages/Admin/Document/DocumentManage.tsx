@@ -4,6 +4,7 @@ import { PDFViewer } from './PDFViewer';
 import { FieldManager } from './FieldManager';
 import { generatePDFWithFields } from './pdfGenerator';
 import Template1 from '/PR.pdf';
+import Template2 from '/ABSTRACT-OF-PRICE-QUOTATION(QMS).pdf'
 import axios from './../../../plugin/axios';
 import Swal from 'sweetalert2';
 
@@ -73,6 +74,7 @@ function DocumentManage() {
 
   const TEMPLATES = [
     { id: 'template1', name: 'Purchase Request Form 1', path: Template1 },
+    { id: 'template2', name: 'ABSTRACT-OF-PRICE-QUOTATION(QMS) Form', path: Template2 }
   ];
 
   const removeRedocsPrefix = (filePath: string) => {

@@ -61,21 +61,29 @@ export const getUniqueDesignations = (_users: User[]): string[] => {
 
 // Map access level to display text
 export const accessLevelLabels: { [key: number]: string } = {
-  1: 'Admin',
-  2: 'Regional Director',
-  3: 'Provencial Officer',
-  4: 'Pronect Focal',
-  5: 'Standard',
-  6: 'Job Order'
+  0: '4dmiN',
+  1: 'Regional Director',
+  2: 'BAC Chairman',
+  3: 'BAC Member',
+  4: 'Supply Officer',
+  5: 'Budget Officer',
+  6: 'Accountant',
+  7: 'Inspector',
+  8: 'End User',
+  9: 'Job Order'
 };
 
 
 // Map access level to color
-export const accessLevelColors: Record<number, string> = {
+export const accessLevelColors: { [key: number]: string } = {
+  0: 'bg-blue-500 text-white',
   1: 'bg-purple-100 text-purple-800',
-  2: 'bg-blue-100 text-blue-800',
-  3: 'bg-green-100 text-green-800',
+  2: 'bg-green-100 text-green-800',
+  3: 'bg-emerald-100 text-emerald-800',
   4: 'bg-yellow-100 text-yellow-800',
-  5: 'bg-gray-100 text-gray-800',
-  6: 'bg-orange-100 text-orange-800'
+  5: 'bg-pink-100 text-pink-800',
+  6: 'bg-orange-100 text-orange-800',
+  7: 'bg-indigo-100 text-indigo-800',
+  8: 'bg-gray-100 text-gray-800',
+  9: 'bg-red-100 text-red-800'
 };

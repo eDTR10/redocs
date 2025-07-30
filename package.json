@@ -38,7 +38,6 @@
     "react-dom": "^18.2.0",
     "react-draggable": "^4.5.0",
     "react-konva": "^18.2.12",
-    "react-pdf": "^10.0.1",
     "react-router-dom": "^6.15.0",
     "react-select": "^5.10.2",
     "react-slick": "^0.30.3",

@@ -22,8 +22,8 @@ import { FilledDocument } from '@/interfaces/Document';
 
 
 // Get all documents (with optional query params for filtering, pagination, etc.)
-export const fetchDocuments = async (params?: Record<string, any>): Promise<FilledDocument[]> => {
-  const response = await axios.get<FilledDocument[]>('document/all/', { params });
+export const fetchDocuments = async (params?: Record<string, any>, config?: Record<string, any> ): Promise<FilledDocument[]> => {
+  const response = await axios.get<FilledDocument[]>('document/all/', { params, ...config, });
   return response.data;
 };
 

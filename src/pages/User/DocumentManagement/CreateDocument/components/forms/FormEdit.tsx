@@ -646,7 +646,7 @@ function FormEdit() {
         <div className="min-h-full bg-gray-50 p-6">
             <div className=" mx-auto">
                 <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
-                    <h1 className="text-3xl font-bold text-gray-800 mb-6">PDF Document Manager</h1>
+                    <h1 className="text-3xl font-bold text-gray-800 mb-6">Create Document</h1>
                     {/* Form Section */}
                     <form className="space-y-6">
                         <div>

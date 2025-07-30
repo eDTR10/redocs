@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Trash2, Edit, Plus, Upload, X, File, Pen, Users, Check } from 'lucide-react';
+import { Trash2, Edit, Plus, Upload, X, Users } from 'lucide-react';
 
 // Add to your Field interface
 export interface Field {
@@ -17,8 +17,13 @@ export interface Field {
   };
   tableConfig?: {
     rows: number;
-    columns: any[];
+    columns: { id: string; label: string; width?: string }[];
     data: any[];
+    borderStyle?: {
+      borderWidth: string;
+      borderColor: string;
+      borderStyle: 'solid' | 'dashed' | 'dotted' | 'none';
+    };
   };
   groupConfig?: {
     fields: Field[];
@@ -75,6 +80,50 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   const [groupName, setGroupName] = useState('');
   const [additionalFields, setAdditionalFields] = useState<any[]>([]);
 
+  // Table management functions
+  const addTableColumn = () => {
+    const newColumn = {
+      id: generateIdFromLabel(`column_${(currentField.tableConfig?.columns?.length || 0) + 1}`),
+      label: `Column ${(currentField.tableConfig?.columns?.length || 0) + 1}`,
+      width: 'auto'
+    };
+
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: [...(currentField.tableConfig?.columns || []), newColumn]
+      }
+    });
+  };
+
+  const updateTableColumn = (index: number, updatedColumn: Partial<{ id: string; label: string; width: string }>) => {
+    const newColumns = [...(currentField.tableConfig?.columns || [])];
+    newColumns[index] = { 
+      ...newColumns[index], 
+      ...updatedColumn,
+      id: updatedColumn.label ? generateIdFromLabel(updatedColumn.label) : newColumns[index].id
+    };
+    
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: newColumns
+      }
+    });
+  };
+
+  const removeTableColumn = (index: number) => {
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: currentField.tableConfig?.columns?.filter((_, i) => i !== index) || []
+      }
+    });
+  };
+
   const getFieldColor = (fieldType: Field['type']) => {
     const colors = {
       text: { stroke: '#3b82f6', fill: 'rgba(59, 130, 246, 0.1)' },
@@ -128,7 +177,12 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
       tableConfig: {
         rows: 1,
         columns: [],
-        data: []
+        data: [],
+        borderStyle: {
+          borderWidth: '1',
+          borderColor: '#000000',
+          borderStyle: 'solid'
+        }
       },
       groupConfig: {
         fields: [],
@@ -203,6 +257,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const addGroupField = () => {
+    if (!currentField.groupConfig) return;
+
     const newField: Field = {
       id: generateIdFromLabel(`sub_field_${currentField.groupConfig.fields.length + 1}`),
       label: `Sub Field ${currentField.groupConfig.fields.length + 1}`,
@@ -230,6 +286,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const updateGroupField = (index: number, updatedField: Partial<Field>) => {
+    if (!currentField.groupConfig) return;
+
     const newFields = [...currentField.groupConfig.fields];
     newFields[index] = { 
       ...newFields[index], 
@@ -247,6 +305,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const removeGroupField = (index: number) => {
+    if (!currentField.groupConfig) return;
+
     setCurrentField({
       ...currentField,
       groupConfig: {
@@ -357,9 +417,9 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <tbody>
-                {Array(field.tableConfig.rows).fill(0).map((_, rowIndex) => (
+                {Array(field.tableConfig?.rows || 1).fill(0).map((_, rowIndex) => (
                   <tr key={rowIndex}>
-                    {field.tableConfig.columns.map((col, colIndex) => (
+                    {field.tableConfig?.columns?.map((col, colIndex) => (
                       <td key={colIndex} className="p-2 border">
                         <input
                           type="text"
@@ -380,8 +440,10 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
               className="mt-2 text-sm text-blue-600 hover:text-blue-800"
               onClick={() => {
                 const newField = {...field};
-                newField.tableConfig.rows += 1;
-                setFields(fields.map(f => f.id === field.id ? newField : f));
+                if (newField.tableConfig) {
+                  newField.tableConfig.rows += 1;
+                  setFields(fields.map(f => f.id === field.id ? newField : f));
+                }
               }}
             >
               <Plus size={16} className="inline mr-1" />
@@ -441,133 +503,6 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             </div>
           </div>
         );
-      case 'signature':
-        return (
-          <div className="border rounded p-4 space-y-3 bg-gray-50">
-            <div className="flex justify-between items-center">
-              <h4 className="font-medium text-gray-800">Signature Details</h4>
-              <button 
-                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                onClick={() => {
-                  // Handle signature capture
-                  const canvas = document.createElement('canvas');
-                  canvas.width = 300;
-                  canvas.height = 150;
-                  const ctx = canvas.getContext('2d');
-                  if (ctx) {
-                    ctx.fillStyle = '#f9fafb';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.strokeStyle = '#4b5563';
-                    ctx.lineWidth = 2;
-                    ctx.font = '14px Arial';
-                    ctx.fillStyle = '#4b5563';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Click to sign here', canvas.width/2, canvas.height/2);
-                  }
-                  
-                  const newSignature = {
-                    ...(previewValues[field.id] || {}),
-                    img: canvas.toDataURL()
-                  };
-                  
-                  setPreviewValues({
-                    ...previewValues,
-                    [field.id]: newSignature
-                  });
-                }}
-              >
-                <Pen size={14} />
-                <span>Sign</span>
-              </button>
-            </div>
-            
-            <div className="space-y-2">
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">Full Name</label>
-                <input 
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.name || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        name: e.target.value
-                      }
-                    });
-                  }}
-                  placeholder="Enter your full name"
-                />
-              </div>
-              
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">ID / Position</label>
-                <input 
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.id || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        id: e.target.value
-                      }
-                    });
-                  }}
-                  placeholder="Enter your ID or position"
-                />
-              </div>
-              
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">Status</label>
-                <select
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.status || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        status: e.target.value
-                      }
-                    });
-                  }}
-                >
-                  <option value="">Select status...</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="Pending">Pending</option>
-                  <option value="For Review">For Review</option>
-                </select>
-              </div>
-              
-              {previewValues[field.id]?.img && (
-                <div className="relative">
-                  <img 
-                    src={previewValues[field.id].img} 
-                    alt="Signature" 
-                    className="border rounded w-full max-h-24 object-contain bg-white"
-                  />
-                  <button
-                    onClick={() => {
-                      const newValue = {...previewValues[field.id]};
-                      delete newValue.img;
-                      setPreviewValues({
-                        ...previewValues,
-                        [field.id]: newValue
-                      });
-                    }}
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
       case 'group':
         const groupData = previewValues[field.id] || {};
         
@@ -578,7 +513,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             {/* Existing grouped fields (visible on PDF) */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-gray-600 mb-2">Visual Fields (shown on PDF):</div>
-              {field.groupConfig?.fields?.map((subField, index) => (
+              {field.groupConfig?.fields?.map((subField) => (
                 <div key={subField.id} className="space-y-1 bg-white p-2 rounded border">
                   <label className="text-sm font-medium text-gray-600">
                     {subField.label}
@@ -760,10 +695,10 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             </div>
             
             {/* Additional fields (non-visual) */}
-            {field.groupConfig?.additionalFields?.length > 0 && (
+            {field.groupConfig?.additionalFields && field.groupConfig.additionalFields.length > 0 && (
               <div className="mt-4 space-y-3">
                 <div className="text-sm font-medium text-gray-600 mb-2">Additional Fields (data only):</div>
-                {field.groupConfig.additionalFields.map((addField, index) => (
+                {field.groupConfig.additionalFields.map((addField) => (
                   <div key={addField.id} className="space-y-1 bg-blue-50 p-2 rounded border">
                     <label className="text-sm font-medium text-gray-600">
                       {addField.label}
@@ -859,7 +794,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                         })}
                       >
                         <option value="">Select...</option>
-                        {addField.options?.map((opt, i) => (
+                        {addField.options?.map((opt: string, i: number) => (
                           <option key={i} value={opt}>{opt}</option>
                         ))}
                       </select>
@@ -1018,7 +953,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 {field.type === 'group' && field.groupConfig && (
                   <div className="mt-1">
                     <div>Visual fields: {field.groupConfig.fields?.map(f => f.label).join(', ')}</div>
-                    {field.groupConfig.additionalFields?.length > 0 && (
+                    {field.groupConfig?.additionalFields && field.groupConfig.additionalFields.length > 0 && (
                       <div>Data fields: {field.groupConfig.additionalFields.map(f => f.label).join(', ')}</div>
                     )}
                   </div>
@@ -1365,6 +1300,186 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                   </div>
                 </div>
               )}
+
+              {/* Select Options Configuration */}
+              {currentField.type === 'select' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Select Options (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={currentField.options?.join(', ') || ''}
+                    onChange={(e) => setCurrentField({
+                      ...currentField,
+                      options: e.target.value.split(',').map(opt => opt.trim()).filter(opt => opt)
+                    })}
+                    className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Option 1, Option 2, Option 3"
+                  />
+                </div>
+              )}
+
+              {/* Table Configuration */}
+              {currentField.type === 'table' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Table Configuration
+                    </label>
+                    
+                    {/* Table Rows */}
+                    <div className="mb-3">
+                      <label className="text-xs text-gray-600">Number of Rows</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        value={currentField.tableConfig?.rows || 1}
+                        onChange={(e) => setCurrentField({
+                          ...currentField,
+                          tableConfig: {
+                            ...currentField.tableConfig!,
+                            rows: parseInt(e.target.value) || 1
+                          }
+                        })}
+                        className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+
+                    {/* Table Columns */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <label className="text-xs text-gray-600">Table Columns</label>
+                        <button
+                          onClick={addTableColumn}
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          <Plus size={16} />
+                          Add Column
+                        </button>
+                      </div>
+                      
+                      {currentField.tableConfig?.columns?.map((column, index) => (
+                        <div key={index} className="border rounded p-3 bg-gray-50">
+                          <div className="flex justify-between items-center mb-2">
+                            <span className="text-sm font-medium">Column {index + 1}</span>
+                            <button
+                              onClick={() => removeTableColumn(index)}
+                              className="text-red-600 hover:text-red-800"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                          
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="text-xs text-gray-600">Column Label</label>
+                              <input
+                                type="text"
+                                value={column.label}
+                                onChange={(e) => updateTableColumn(index, { label: e.target.value })}
+                                className="w-full p-2 border rounded"
+                                placeholder="Column header"
+                              />
+                            </div>
+                            
+                            <div>
+                              <label className="text-xs text-gray-600">Width (e.g., 100px, 20%, auto)</label>
+                              <input
+                                type="text"
+                                value={column.width || 'auto'}
+                                onChange={(e) => updateTableColumn(index, { width: e.target.value })}
+                                className="w-full p-2 border rounded"
+                                placeholder="auto"
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {(!currentField.tableConfig?.columns || currentField.tableConfig.columns.length === 0) && (
+                        <div className="text-center text-gray-500 py-4 border-2 border-dashed rounded">
+                          No columns added yet. Click "Add Column" to start.
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Table Border Configuration */}
+                    <div className="space-y-3 border-t pt-3">
+                      <label className="text-sm font-medium text-gray-700">Border Settings</label>
+                      
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="text-xs text-gray-600">Border Width</label>
+                          <select
+                            value={currentField.tableConfig?.borderStyle?.borderWidth || '1'}
+                            onChange={(e) => setCurrentField({
+                              ...currentField,
+                              tableConfig: {
+                                ...currentField.tableConfig!,
+                                borderStyle: {
+                                  ...currentField.tableConfig?.borderStyle!,
+                                  borderWidth: e.target.value
+                                }
+                              }
+                            })}
+                            className="w-full p-2 border rounded"
+                          >
+                            <option value="0">None</option>
+                            <option value="1">1px</option>
+                            <option value="2">2px</option>
+                            <option value="3">3px</option>
+                            <option value="4">4px</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="text-xs text-gray-600">Border Style</label>
+                          <select
+                            value={currentField.tableConfig?.borderStyle?.borderStyle || 'solid'}
+                            onChange={(e) => setCurrentField({
+                              ...currentField,
+                              tableConfig: {
+                                ...currentField.tableConfig!,
+                                borderStyle: {
+                                  ...currentField.tableConfig?.borderStyle!,
+                                  borderStyle: e.target.value as 'solid' | 'dashed' | 'dotted' | 'none'
+                                }
+                              }
+                            })}
+                            className="w-full p-2 border rounded"
+                          >
+                            <option value="solid">Solid</option>
+                            <option value="dashed">Dashed</option>
+                            <option value="dotted">Dotted</option>
+                            <option value="none">None</option>
+                          </select>
+                        </div>
+                        
+                        <div>
+                          <label className="text-xs text-gray-600">Border Color</label>
+                          <input
+                            type="color"
+                            value={currentField.tableConfig?.borderStyle?.borderColor || '#000000'}
+                            onChange={(e) => setCurrentField({
+                              ...currentField,
+                              tableConfig: {
+                                ...currentField.tableConfig!,
+                                borderStyle: {
+                                  ...currentField.tableConfig?.borderStyle!,
+                                  borderColor: e.target.value
+                                }
+                              }
+                            })}
+                            className="w-full p-1 border rounded h-[38px]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               <div className="flex items-center">
                 <input
@@ -1394,8 +1509,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       onChange={(e) => setCurrentField({
                         ...currentField,
                         style: {
-                          ...currentField.style,
-                          fontSize: e.target.value
+                          fontSize: e.target.value,
+                          color: currentField.style?.color || '#000000',
+                          fontFamily: currentField.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+                          fontWeight: currentField.style?.fontWeight || 'normal',
+                          fontStyle: currentField.style?.fontStyle || 'normal'
                         }
                       })}
                       className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1412,8 +1530,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       onChange={(e) => setCurrentField({
                         ...currentField,
                         style: {
-                          ...currentField.style,
-                          color: e.target.value
+                          fontSize: currentField.style?.fontSize || '12',
+                          color: e.target.value,
+                          fontFamily: currentField.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+                          fontWeight: currentField.style?.fontWeight || 'normal',
+                          fontStyle: currentField.style?.fontStyle || 'normal'
                         }
                       })}
                       className="w-full p-1 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 h-[42px]"
@@ -1431,8 +1552,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       onChange={(e) => setCurrentField({
                         ...currentField,
                         style: {
-                          ...currentField.style,
-                          fontFamily: e.target.value
+                          fontSize: currentField.style?.fontSize || '12',
+                          color: currentField.style?.color || '#000000',
+                          fontFamily: e.target.value,
+                          fontWeight: currentField.style?.fontWeight || 'normal',
+                          fontStyle: currentField.style?.fontStyle || 'normal'
                         }
                       })}
                       className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1460,8 +1584,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       onChange={(e) => setCurrentField({
                         ...currentField,
                         style: {
-                          ...currentField.style,
-                          fontWeight: e.target.value
+                          fontSize: currentField.style?.fontSize || '12',
+                          color: currentField.style?.color || '#000000',
+                          fontFamily: currentField.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+                          fontWeight: e.target.value,
+                          fontStyle: currentField.style?.fontStyle || 'normal'
                         }
                       })}
                       className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1490,7 +1617,10 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                     onChange={(e) => setCurrentField({
                       ...currentField,
                       style: {
-                        ...currentField.style,
+                        fontSize: currentField.style?.fontSize || '12',
+                        color: currentField.style?.color || '#000000',
+                        fontFamily: currentField.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+                        fontWeight: currentField.style?.fontWeight || 'normal',
                         fontStyle: e.target.value
                       }
                     })}

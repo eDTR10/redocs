@@ -51,7 +51,7 @@ const MyDocuments = () => {
                 setDocuments(data);
                 setError(null);
             })
-            .catch((err) => {
+            .catch(() => {
                 setError('Failed to fetch documents');
             })
             .finally(() => setLoading(false));

@@ -14,7 +14,7 @@ const initialFormData: UserFormData = {
   inital: '',
   designation: '',
   project: '',
-  acc_lvl: 3,
+  acc_lvl: 0,
   password: ''
 };
 
@@ -36,7 +36,7 @@ const EditUserModal = ({getUsers}:any) => {
         inital: selectedUser.inital || '',
         designation: selectedUser.designation || '',
         project: selectedUser.project || '',
-        acc_lvl: selectedUser.acc_lvl || 3,
+        acc_lvl: selectedUser.acc_lvl || 8,
         password: ''
       });
     }
@@ -223,12 +223,15 @@ const EditUserModal = ({getUsers}:any) => {
                   onChange={handleChange}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
                 >
-                  <option value={1}>Admin</option>
-                  <option value={2}>Regional Director</option>
-                  <option value={3}>Provencial Officer</option>
-                  <option value={4}>Pronect Focal</option>
-                  <option value={5}>Standard</option>
-                  <option value={6}>Job Order</option>
+                  <option value={1}>Regional Director</option>
+                  <option value={2}>BAC Chairman</option>
+                  <option value={3}>BAC Member</option>
+                  <option value={4}>Supply Officer</option>
+                  <option value={5}>Budget Officer</option>
+                  <option value={6}>Accountant</option>
+                  <option value={7}>Inspector</option>
+                  <option value={8}>End User</option>
+                  <option value={9}>Job Order</option>
                 </select>
               </div>
             </div>

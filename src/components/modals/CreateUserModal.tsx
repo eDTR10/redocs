@@ -14,8 +14,8 @@ const initialFormData: UserFormData = {
   inital: '',
   designation: '',
   project: '',
-  acc_lvl: 3,
-  password: ''
+  acc_lvl: 9,
+  password: '@user322w'
 };
 
 const accessLevelOptions = [
