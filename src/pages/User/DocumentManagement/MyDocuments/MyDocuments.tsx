@@ -10,7 +10,9 @@ import {
     FileText,
     Clock,
     CheckCircle,
-    Truck
+    XCircle,
+    Truck,
+    Hand
 } from 'lucide-react';
 import DocumentDialog from './dialogs/DocumentDialog';
 import { FilledDocument } from '../../../../interfaces/Document';
@@ -172,7 +174,7 @@ const MyDocuments = () => {
     // Status mapping (1-blue, 2-semi-green, 3-green)
     const statusMap: Record<string | number, { label: string; color: string; icon: JSX.Element }> = {
         1: { label: 'Submitted', color: 'bg-blue-100 text-blue-800', icon: <Clock className="w-4 h-4 text-blue-600" /> },
-        2: { label: 'In-Route', color: 'bg-green-100 text-green-700', icon: <Truck className="w-4 h-4 text-green-700" /> },
+        2: { label: 'For PR Number', color: 'bg-green-100 text-green-700', icon: <Hand className="w-4 h-4 text-green-700" /> },
         3: { label: 'Completed', color: 'bg-green-500 text-white', icon: <CheckCircle className="w-4 h-4 text-green-900" /> },
     };
     const getStatusIcon = (status: string | number) => statusMap[status]?.icon || <FileText className="w-4 h-4 text-gray-600" />;

@@ -166,7 +166,7 @@ function Document() {
         return 'bg-green-100 text-green-400';
       case 3:
       case "3":
-        return 'bg-green-100 text-green-800';
+        return 'bg-green-500 text-white';
       default:
         return 'bg-gray-100 text-gray-800';
     }
@@ -367,7 +367,7 @@ function Document() {
       <DocumentDialog
         isOpen={isDialogOpen}
         onClose={handleCloseDialog}
-        document={selectedDocument}
+         document={selectedDocument as any}
         mode={dialogMode}
         getDocuments={getDocuments}
       />
