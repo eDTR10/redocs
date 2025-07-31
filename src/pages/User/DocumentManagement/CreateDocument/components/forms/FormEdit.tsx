@@ -25,6 +25,7 @@ function FormEdit() {
         options: [],
         coordinates: null,
         page: 1,
+        formula: '', // Add formula property
         listConfig: {
             minItems: 1,
             maxItems: 10,
@@ -357,7 +358,10 @@ function FormEdit() {
                             columns: field.tableConfig.columns.map(col => ({
                                 label: col.label,
                                 width: col.width,
-                                type: col.type || 'text'
+                                type: col.type || 'text',
+                                id: col.id,
+                                formula: col.formula || '',
+                                options: col.options || []
                             })),
                             data: Array(field.tableConfig.rows).fill(
                                 Array(field.tableConfig.columns.length).fill('')

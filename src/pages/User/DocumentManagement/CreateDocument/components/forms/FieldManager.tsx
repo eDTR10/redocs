@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Trash2, Edit, Plus, Upload, X, File, Pen, Users, Check } from 'lucide-react';
+import { evaluate } from 'mathjs';
 
 // Add to your Field interface
 export interface Field {
@@ -10,6 +11,7 @@ export interface Field {
   options?: string[];
   coordinates: { x: number; y: number; width: number; height: number } | null;
   page: number;
+  formula?: string; // Add formula property for calculated fields
   listConfig?: {
     minItems: number;
     maxItems: number;
@@ -41,6 +43,91 @@ const generateIdFromLabel = (label: string): string => {
     .replace(/\s+/g, '_') // Replace spaces with underscores
     .replace(/_{2,}/g, '_') // Replace multiple underscores with single
     .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
+};
+
+// Formula evaluation function with circular reference protection
+const evaluateFormula = (formula: string, fields: Field[], previewValues: Record<string, any>, evaluating = new Set<string>()): number => {
+  if (!formula.trim()) return 0;
+  
+  try {
+    let processedFormula = formula;
+    
+    // Replace field references with their values
+    fields.forEach(field => {
+      if (!field.id) return;
+      
+      // Check for circular reference
+      if (evaluating.has(field.id)) {
+        console.warn(`Circular reference detected for field: ${field.id}`);
+        return;
+      }
+      
+      const fieldRegex = new RegExp(`\\b${field.id}\\b`, 'g');
+      if (processedFormula.match(fieldRegex)) {
+        let fieldValue = 0;
+        
+        if (field.formula && field.formula.trim()) {
+          // This is a calculated field, evaluate its formula first
+          evaluating.add(field.id);
+          fieldValue = evaluateFormula(field.formula, fields, previewValues, evaluating);
+          evaluating.delete(field.id);
+        } else {
+          // Regular field, get its value
+          fieldValue = parseFloat(previewValues[field.id] || '0') || 0;
+        }
+        
+        processedFormula = processedFormula.replace(fieldRegex, fieldValue.toString());
+      }
+    });
+    
+    // Handle table field references (table_row_col format)
+    const tableFieldRegex = /table_(\d+)_(\d+)/g;
+    processedFormula = processedFormula.replace(tableFieldRegex, (match, row, col) => {
+      const tableField = fields.find(f => f.type === 'table');
+      if (tableField && tableField.tableConfig) {
+        const rowIndex = parseInt(row);
+        const colIndex = parseInt(col);
+        const cellValue = tableField.tableConfig.data?.[rowIndex]?.[colIndex];
+        
+        // Check if this cell has a formula
+        const column = tableField.tableConfig.columns?.[colIndex];
+        if (column && column.formula) {
+          // Evaluate the cell formula
+          const cellFormula = column.formula.replace(/row/g, rowIndex.toString());
+          try {
+            return evaluate(cellFormula).toString();
+          } catch (e) {
+            console.warn(`Error evaluating cell formula: ${e}`);
+            return '0';
+          }
+        }
+        
+        return (parseFloat(cellValue) || 0).toString();
+      }
+      return '0';
+    });
+    
+    const result = evaluate(processedFormula);
+    return typeof result === 'number' ? result : 0;
+  } catch (error) {
+    console.error('Formula evaluation error:', error);
+    return 0;
+  }
+};
+
+// Function to update calculated fields
+const updateCalculatedFields = (currentValues: Record<string, any>, allFields: Field[]): Record<string, any> => {
+  const updatedValues = { ...currentValues };
+  
+  // Find all fields with formulas and update their values
+  allFields.forEach(field => {
+    if (field.formula && field.formula.trim() && field.id) {
+      const calculatedValue = evaluateFormula(field.formula, allFields, updatedValues);
+      updatedValues[field.id] = calculatedValue;
+    }
+  });
+  
+  return updatedValues;
 };
 
 interface FieldManagerProps {
@@ -265,11 +352,18 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             type="text"
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 placeholder-gray-400 transition"
             placeholder={`Enter ${field.label}`}
-            value={previewValues[field.id] || ''}
-            onChange={(e) => setPreviewValues({
-              ...previewValues,
-              [field.id]: e.target.value
-            })}
+            value={field.formula ? evaluateFormula(field.formula, fields, previewValues).toString() : (previewValues[field.id] || '')}
+            onChange={(e) => {
+              if (!field.formula) {
+                const updatedValues = updateCalculatedFields({
+                  ...previewValues,
+                  [field.id]: e.target.value
+                }, fields);
+                setPreviewValues(updatedValues);
+              }
+            }}
+            readOnly={!!field.formula}
+            style={field.formula ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
           />
         );
       case 'number':
@@ -277,11 +371,18 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
           <input
             type="number"
             className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 transition"
-            value={previewValues[field.id] || ''}
-            onChange={(e) => setPreviewValues({
-              ...previewValues,
-              [field.id]: e.target.value
-            })}
+            value={field.formula ? evaluateFormula(field.formula, fields, previewValues) : (previewValues[field.id] || '')}
+            onChange={(e) => {
+              if (!field.formula) {
+                const updatedValues = updateCalculatedFields({
+                  ...previewValues,
+                  [field.id]: e.target.value
+                }, fields);
+                setPreviewValues(updatedValues);
+              }
+            }}
+            readOnly={!!field.formula}
+            style={field.formula ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
           />
         );
       case 'email':
@@ -976,7 +1077,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             </button>
           )}
         </div>
-
+        
         {fields.map(field => (
           <div key={field.id} className="mb-4 hover:bg-slate-400/10 p-3 rounded-sm cursor-pointer last:mb-0">
             <div className="flex justify-between items-start mb-2">
@@ -1285,6 +1386,72 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                   <option value="group">Group</option>
                 </select>
               </div>
+
+              {/* Formula Field for number and text types */}
+              {(currentField.type === 'number' || currentField.type === 'text') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Formula (Optional)
+                  </label>
+                  <div className="space-y-2">
+                    <textarea
+                      value={currentField.formula || ''}
+                      onChange={(e) => setCurrentField({ ...currentField, formula: e.target.value })}
+                      className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Enter formula (e.g., field1 + field2 * 0.1)"
+                      rows={3}
+                    />
+                    <div className="text-xs text-gray-500">
+                      <p>Available fields:</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {fields
+                          .filter(f => f.id && f.id !== generateIdFromLabel(currentField.label))
+                          .map(field => (
+                            <button
+                              key={field.id}
+                              type="button"
+                              onClick={() => {
+                                const currentFormula = currentField.formula || '';
+                                setCurrentField({ 
+                                  ...currentField, 
+                                  formula: currentFormula + (currentFormula ? ' + ' : '') + field.id 
+                                });
+                              }}
+                              className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs hover:bg-blue-200"
+                            >
+                              {field.id}
+                            </button>
+                          ))}
+                        {/* Table field references */}
+                        {fields
+                          .filter(f => f.type === 'table' && f.tableConfig?.columns)
+                          .map(tableField => 
+                            tableField.tableConfig?.columns?.map((col, colIndex) => 
+                              Array.from({ length: tableField.tableConfig?.rows || 1 }, (_, rowIndex) => (
+                                <button
+                                  key={`${tableField.id}_${rowIndex}_${colIndex}`}
+                                  type="button"
+                                  onClick={() => {
+                                    const fieldRef = `table_${rowIndex}_${colIndex}`;
+                                    const currentFormula = currentField.formula || '';
+                                    setCurrentField({ 
+                                      ...currentField, 
+                                      formula: currentFormula + (currentFormula ? ' + ' : '') + fieldRef 
+                                    });
+                                  }}
+                                  className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs hover:bg-green-200"
+                                  title={`${col.label || `Column ${colIndex + 1}`} - Row ${rowIndex + 1}`}
+                                >
+                                  📊 table_{rowIndex}_{colIndex}
+                                </button>
+                              ))
+                            )
+                          )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Group Configuration */}
               {currentField.type === 'group' && (

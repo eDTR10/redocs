@@ -40,7 +40,8 @@ function DocumentManage() {
       fontFamily: 'Palatino, "Palatino Linotype", serif',
       fontWeight: 'normal',
       fontStyle: 'normal'
-    }
+    },
+    formula: '' // For arithmetic calculations
   });
   const [jsonTemplate, setJsonTemplate] = useState('');
   const [showPreview, setShowPreview] = useState(false);
@@ -209,99 +210,103 @@ function DocumentManage() {
     
     try {
       const template = {
-        document: {
-          name: documentName || (pdfFile ? pdfFile.name : 'untitled.pdf'),
-          documentUrl: removeRedocsPrefix(selectedTemplate) || (pdfFile ? URL.createObjectURL(pdfFile) : ''),
-          created: new Date().toISOString()
-        },
-        fields: fields.map(field => {
-          const baseField: any = {
-            id: field.id,
-            label: field.label,
-            type: field.type,
-            required: field.required,
-            coordinates: field.coordinates,
-            page: field.page,
-            style: {
-              fontSize: field.style?.fontSize || '12',
-              color: field.style?.color || '#000000',
-              fontFamily: field.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
-              fontWeight: field.style?.fontWeight || 'normal',
-              fontStyle: field.style?.fontStyle || 'normal'
-            }
+      document: {
+        name: documentName || (pdfFile ? pdfFile.name : 'untitled.pdf'),
+        documentUrl: selectedTemplate || (pdfFile ? URL.createObjectURL(pdfFile) : ''),
+        created: new Date().toISOString()
+      },
+      fields: fields.map(field => {
+        const baseField: any = {
+          id: field.id,
+          label: field.label,
+          type: field.type,
+          required: field.required,
+          coordinates: field.coordinates,
+          page: field.page,
+          formula: field.formula || '', // Add formula property
+          style: {
+            fontSize: field.style?.fontSize || '12',
+            color: field.style?.color || '#000000',
+            fontFamily: field.style?.fontFamily || 'Palatino, "Palatino Linotype", serif',
+            fontWeight: field.style?.fontWeight || 'normal',
+            fontStyle: field.style?.fontStyle || 'normal'
+          }
+        };
+
+        // Add type-specific properties
+        if (field.type === 'select' && field.options) {
+          baseField.options = field.options;
+        }
+
+        if (field.type === 'checkbox') {
+          baseField.value = false;
+        }
+
+        if (field.type === 'table' && field.tableConfig) {
+          baseField.tableConfig = {
+            rows: field.tableConfig.rows,
+            expandable: true,
+            columns: field.tableConfig.columns.map(col => ({
+              label: col.label,
+              width: col.width,
+              type: col.type || 'text',
+              id: col.id,
+              formula: col.formula || '',
+              options: col.options || []
+            })),
+            data: Array(field.tableConfig.rows).fill(
+              Array(field.tableConfig.columns.length).fill('')
+            ),
+            _footer: "xxx nothing follows xxx"
           };
+        }
 
-          // Add type-specific properties
-          if (field.type === 'select' && field.options) {
-            baseField.options = field.options;
-          }
-
-          if (field.type === 'checkbox') {
-            baseField.value = false;
-          }
-
-          if (field.type === 'table' && field.tableConfig) {
-            baseField.tableConfig = {
-              rows: field.tableConfig.rows,
-              expandable: true,
-              columns: field.tableConfig.columns.map(col => ({
-                label: col.label,
-                width: col.width,
-                type: col.type || 'text'
-              })),
-              data: Array(field.tableConfig.rows).fill(
-                Array(field.tableConfig.columns.length).fill('')
-              ),
-              _footer: "xxx nothing follows xxx"
-            };
-          }
-
-          if (field.type === 'group' && field.groupConfig) {
-            baseField.groupConfig = {
-              fields: field.groupConfig.fields || [],
-              additionalFields: field.groupConfig.additionalFields || []
-            };
-          }
-
-          if (field.type === 'list' && field.listConfig) {
-            baseField.listConfig = field.listConfig;
-          }
-
-          return baseField;
-        }),
-        schema: fields.reduce((acc: Record<string, any>, field) => {
-          const schemaField: any = {
-            type: field.type,
-            required: field.required,
-            label: field.label
+        if (field.type === 'group' && field.groupConfig) {
+          baseField.groupConfig = {
+            fields: field.groupConfig.fields || [],
+            additionalFields: field.groupConfig.additionalFields || []
           };
+        }
 
-          if (field.type === 'table' && field.tableConfig) {
-            schemaField.tableConfig = {
-              ...field.tableConfig,
-              _footer: "xxx nothing follows xxx"
-            };
-          }
+        if (field.type === 'list' && field.listConfig) {
+          baseField.listConfig = field.listConfig;
+        }
 
-          if (field.type === 'select' && field.options) {
-            schemaField.options = field.options;
-          }
+        return baseField;
+      }),
+      schema: fields.reduce((acc: Record<string, any>, field) => {
+        const schemaField: any = {
+          type: field.type,
+          required: field.required,
+          label: field.label
+        };
 
-          if (field.type === 'group' && field.groupConfig) {
-            schemaField.groupConfig = {
-              fields: field.groupConfig.fields || [],
-              additionalFields: field.groupConfig.additionalFields || []
-            };
-          }
+        if (field.type === 'table' && field.tableConfig) {
+          schemaField.tableConfig = {
+            ...field.tableConfig,
+            _footer: "xxx nothing follows xxx"
+          };
+        }
 
-          if (field.type === 'list' && field.listConfig) {
-            schemaField.listConfig = field.listConfig;
-          }
+        if (field.type === 'select' && field.options) {
+          schemaField.options = field.options;
+        }
 
-          acc[field.id] = schemaField;
-          return acc;
-        }, {})
-      };
+        if (field.type === 'group' && field.groupConfig) {
+          schemaField.groupConfig = {
+            fields: field.groupConfig.fields || [],
+            additionalFields: field.groupConfig.additionalFields || []
+          };
+        }
+
+        if (field.type === 'list' && field.listConfig) {
+          schemaField.listConfig = field.listConfig;
+        }
+
+        acc[field.id] = schemaField;
+        return acc;
+      }, {})
+    };
 
       const response = await axios.post('/template/all/', { 
         "name": documentName, 
@@ -354,6 +359,7 @@ function DocumentManage() {
           required: field.required,
           coordinates: field.coordinates,
           page: field.page,
+          formula: field.formula || '', // Add formula property
           style: {
             fontSize: field.style?.fontSize || '12',
             color: field.style?.color || '#000000',
@@ -379,7 +385,10 @@ function DocumentManage() {
             columns: field.tableConfig.columns.map(col => ({
               label: col.label,
               width: col.width,
-              type: col.type || 'text'
+              type: col.type || 'text',
+              id: col.id,
+              formula: col.formula || '',
+              options: col.options || []
             })),
             data: Array(field.tableConfig.rows).fill(
               Array(field.tableConfig.columns.length).fill('')

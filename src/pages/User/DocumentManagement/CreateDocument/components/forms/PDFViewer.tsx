@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { evaluate } from 'mathjs';
 
 interface PDFViewerProps {
   pdfUrl: string | null;

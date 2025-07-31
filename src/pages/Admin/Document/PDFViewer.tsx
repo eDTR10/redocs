@@ -1,4 +1,170 @@
 import React, { useRef, useEffect, useState } from 'react';
+import { evaluate } from 'mathjs';
+
+// Field interface definition
+interface Field {
+  id: string;
+  label: string;
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image' | 'group' | 'signature';
+  required: boolean;
+  options?: string[];
+  coordinates: { x: number; y: number; width: number; height: number } | null;
+  page: number;
+  formula?: string; // Add formula property for calculated fields
+  listConfig?: {
+    minItems: number;
+    maxItems: number;
+    columns: any[];
+  };
+  tableConfig?: {
+    rows: number;
+    columns: any[];
+    data: any[];
+  };
+  groupConfig?: {
+    fields: Field[];
+    additionalFields?: any[]; // For non-visual fields
+  };
+  style?: {
+    fontSize: string;
+    color: string;
+    fontFamily: string;
+    fontWeight: string;
+    fontStyle: string;
+  };
+}
+
+interface Coordinates {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+// Formula evaluation function with circular reference protection
+const evaluateFormula = (formula: string, fields: Field[], previewValues: Record<string, any>, evaluating = new Set<string>(), currentRow?: number, currentTableField?: Field): number => {
+  if (!formula.trim()) return 0;
+  
+  try {
+    let processedFormula = formula;
+    
+    // Handle table column references (table.columnName format)
+    if (currentRow !== undefined && currentTableField?.tableConfig) {
+      const tableColumnRegex = /table\.(\w+)/g;
+      processedFormula = processedFormula.replace(tableColumnRegex, (match, columnName) => {
+        // Find the column index by name (case-insensitive)
+        const columnIndex = currentTableField.tableConfig.columns.findIndex(
+          col => col.label.toLowerCase().replace(/\s+/g, '') === columnName.toLowerCase()
+        );
+        
+        if (columnIndex !== -1) {
+          const cellKey = `${currentTableField.id}_${currentRow}_${columnIndex}`;
+          const cellValue = previewValues[cellKey];
+          console.log(`Table formula: ${match} -> ${cellKey} = ${cellValue}`);
+          
+          if (cellValue !== undefined && cellValue !== '') {
+            const numericValue = parseFloat(cellValue) || 0;
+            return numericValue.toString();
+          }
+        }
+        
+        console.warn(`Column ${columnName} not found in table ${currentTableField.id}`);
+        return '0';
+      });
+    }
+    
+    // Replace field references with their values
+    fields.forEach(field => {
+      if (!field.id) return;
+      
+      // Check for circular reference
+      if (evaluating.has(field.id)) {
+        console.warn(`Circular reference detected for field: ${field.id}`);
+        return;
+      }
+      
+      const fieldRegex = new RegExp(`\\b${field.id}\\b`, 'g');
+      if (processedFormula.match(fieldRegex)) {
+        let fieldValue = 0;
+        
+        if (field.formula && field.formula.trim()) {
+          // This is a calculated field, evaluate its formula first
+          evaluating.add(field.id);
+          fieldValue = evaluateFormula(field.formula, fields, previewValues, evaluating);
+          evaluating.delete(field.id);
+        } else {
+          // Regular field, get its value
+          fieldValue = parseFloat(previewValues[field.id] || '0') || 0;
+        }
+        
+        processedFormula = processedFormula.replace(fieldRegex, fieldValue.toString());
+      }
+    });
+    
+    // Handle table field references (table_row_col format)
+    const tableFieldRegex = /table_(\d+)_(\d+)/g;
+    processedFormula = processedFormula.replace(tableFieldRegex, (match, row, col) => {
+      // Find any table field and try to get the cell value
+      const rowIndex = parseInt(row);
+      const colIndex = parseInt(col);
+      
+      console.log(`Looking for table cell: table_${rowIndex}_${colIndex}`);
+      
+      // Look for cell values in the format: tableFieldId_row_col
+      for (const field of fields) {
+        if (field.type === 'table' && field.id) {
+          const cellKey = `${field.id}_${rowIndex}_${colIndex}`;
+          const cellValue = previewValues[cellKey];
+          console.log(`Checking field ${field.id}, key: ${cellKey}, value:`, cellValue);
+          
+          if (cellValue !== undefined && cellValue !== '') {
+            // Check if this cell has a formula
+            const column = field.tableConfig?.columns?.[colIndex];
+            if (column && column.formula) {
+              // Evaluate the cell formula
+              const cellFormula = column.formula.replace(/row/g, rowIndex.toString());
+              try {
+                return evaluate(cellFormula).toString();
+              } catch (e) {
+                console.warn(`Error evaluating cell formula: ${e}`);
+                return '0';
+              }
+            }
+            
+            const numericValue = parseFloat(cellValue) || 0;
+            console.log(`Returning numeric value: ${numericValue}`);
+            return numericValue.toString();
+          }
+        }
+      }
+      
+      console.log(`No value found for table_${rowIndex}_${colIndex}, returning 0`);
+      return '0';
+    });
+    
+    console.log(`Final processed formula: ${processedFormula}`);
+    
+    const result = evaluate(processedFormula);
+    return typeof result === 'number' ? result : 0;
+  } catch (error) {
+    console.error('Formula evaluation error:', error);
+    return 0;
+  }
+};
+
+// Helper function to get field value (with formula evaluation)
+const getFieldValue = (field: Field, fields: Field[], previewValues: Record<string, any>, currentRow?: number, currentTableField?: Field): string => {
+  if (field.formula && field.formula.trim()) {
+    // This is a calculated field, evaluate the formula
+    console.log(`Evaluating formula for field ${field.id}:`, field.formula);
+    console.log('Available preview values:', previewValues);
+    const result = evaluateFormula(field.formula, fields, previewValues, new Set<string>(), currentRow, currentTableField);
+    console.log(`Formula result:`, result);
+    return result.toString();
+  }
+  // Regular field, return the preview value
+  return previewValues[field.id] || '';
+};
 
 interface PDFViewerProps {
   pdfUrl: string | null;
@@ -319,8 +485,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
             case 'text':
             case 'email':
             case 'number':
-              if (subValue) {
-                ctx.fillText(subValue, subField.coordinates.x + 5, subField.coordinates.y + (subField.coordinates.height / 2) + 5);
+              const subFieldValue = getFieldValue(subField, fields, { ...previewValues, ...groupData });
+              if (subFieldValue) {
+                ctx.fillText(subFieldValue, subField.coordinates.x + 5, subField.coordinates.y + (subField.coordinates.height / 2) + 5);
               }
               break;
               
@@ -448,7 +615,7 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
       case 'text':
       case 'email':
       case 'number':
-        const value = previewValues[field.id] || '';
+        const value = getFieldValue(field, fields, previewValues);
         ctx.fillStyle = field.style?.color || '#000000';
         ctx.font = getFontString(field);
         ctx.fillText(value, field.coordinates.x + 5, field.coordinates.y + (field.coordinates.height / 2) + 5);
@@ -642,7 +809,16 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
           const colWidth = col.width ? col.width * widthScale : availableWidth / field.tableConfig.columns.length;
           
           for (let row = 0; row < visibleRows; row++) {
-            const cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+            let cellValue = previewValues[`${field.id}_${row}_${colIndex}`] || '';
+            
+            // Check if this column has a formula
+            if (col.formula && col.formula.trim()) {
+              console.log(`Evaluating table cell formula for ${field.id}_${row}_${colIndex}:`, col.formula);
+              const formulaResult = evaluateFormula(col.formula, fields, previewValues, new Set<string>(), row, field);
+              cellValue = formulaResult.toString();
+              console.log(`Table cell formula result: ${formulaResult}`);
+            }
+            
             if (cellValue) {
               ctx.fillStyle = field.style?.color || '#000000';
               ctx.font = getFontString(field, field.style?.fontSize || '11');
@@ -814,8 +990,9 @@ export const PDFViewer: React.FC<PDFViewerProps> = ({
               case 'text':
               case 'email':
               case 'number':
-                if (subValue) {
-                  ctx.fillText(subValue, subField.coordinates.x + 5, subField.coordinates.y + (subField.coordinates.height / 2) + 5);
+                const subFieldValue = getFieldValue(subField, fields, { ...previewValues, ...groupData });
+                if (subFieldValue) {
+                  ctx.fillText(subFieldValue, subField.coordinates.x + 5, subField.coordinates.y + (subField.coordinates.height / 2) + 5);
                 }
                 break;
                 
