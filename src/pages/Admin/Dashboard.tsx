@@ -1734,12 +1734,19 @@ function Dashboard() {
     if (selectedDocuments.length === 0) return;
 
     try {
-      const updatePromises = selectedDocuments.map(docId =>
-        axios.put(`document/${docId}/`, { 
-          ...documents.find(d => d.id === docId), 
-          status: newStatus 
-        })
-      );
+      const updatePromises = selectedDocuments.map(docId => {
+        const doc = documents.find(d => d.id === docId);
+        if (!doc) return Promise.resolve();
+        
+        // Ensure created_by is sent as just the ID number
+        const documentToSend = {
+          ...doc,
+          created_by: doc.created_by.id,
+          status: newStatus
+        };
+        
+        return axios.put(`document/${docId}/`, documentToSend);
+      });
 
       await Promise.all(updatePromises);
 
