@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
-import { Trash2, Edit, Plus, Upload, X, File, Pen, Users, Check } from 'lucide-react';
+import { Trash2, Edit, Plus, Upload, X, Users, GripVertical, ChevronUp, ChevronDown, Eye, EyeOff } from 'lucide-react';
 import { evaluate } from 'mathjs';
 
 // Add to your Field interface
 export interface Field {
   id: string;
   label: string;
-  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image' | 'group' | 'signature';
+  type: 'text' | 'number' | 'select' | 'checkbox' | 'date' | 'table' | 'list' | 'textarea' | 'email' | 'image' | 'group';
   required: boolean;
   options?: string[];
   coordinates: { x: number; y: number; width: number; height: number } | null;
   page: number;
-  formula?: string; // Add formula property for calculated fields
   listConfig?: {
     minItems: number;
     maxItems: number;
@@ -19,8 +18,13 @@ export interface Field {
   };
   tableConfig?: {
     rows: number;
-    columns: any[];
+    columns: { id: string; label: string; width?: string; type?: string; formula?: string; options?: string[] }[];
     data: any[];
+    borderStyle?: {
+      borderWidth: string;
+      borderColor: string;
+      borderStyle: 'solid' | 'dashed' | 'dotted' | 'none';
+    };
   };
   groupConfig?: {
     fields: Field[];
@@ -33,6 +37,11 @@ export interface Field {
     fontWeight: string;
     fontStyle: string;
   };
+  // New properties for field management
+  order?: number;
+  height?: number;
+  visible?: boolean;
+  formula?: string; // For arithmetic operations like Excel
 }
 
 // Helper function to generate ID from label
@@ -43,91 +52,6 @@ const generateIdFromLabel = (label: string): string => {
     .replace(/\s+/g, '_') // Replace spaces with underscores
     .replace(/_{2,}/g, '_') // Replace multiple underscores with single
     .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
-};
-
-// Formula evaluation function with circular reference protection
-const evaluateFormula = (formula: string, fields: Field[], previewValues: Record<string, any>, evaluating = new Set<string>()): number => {
-  if (!formula.trim()) return 0;
-  
-  try {
-    let processedFormula = formula;
-    
-    // Replace field references with their values
-    fields.forEach(field => {
-      if (!field.id) return;
-      
-      // Check for circular reference
-      if (evaluating.has(field.id)) {
-        console.warn(`Circular reference detected for field: ${field.id}`);
-        return;
-      }
-      
-      const fieldRegex = new RegExp(`\\b${field.id}\\b`, 'g');
-      if (processedFormula.match(fieldRegex)) {
-        let fieldValue = 0;
-        
-        if (field.formula && field.formula.trim()) {
-          // This is a calculated field, evaluate its formula first
-          evaluating.add(field.id);
-          fieldValue = evaluateFormula(field.formula, fields, previewValues, evaluating);
-          evaluating.delete(field.id);
-        } else {
-          // Regular field, get its value
-          fieldValue = parseFloat(previewValues[field.id] || '0') || 0;
-        }
-        
-        processedFormula = processedFormula.replace(fieldRegex, fieldValue.toString());
-      }
-    });
-    
-    // Handle table field references (table_row_col format)
-    const tableFieldRegex = /table_(\d+)_(\d+)/g;
-    processedFormula = processedFormula.replace(tableFieldRegex, (match, row, col) => {
-      const tableField = fields.find(f => f.type === 'table');
-      if (tableField && tableField.tableConfig) {
-        const rowIndex = parseInt(row);
-        const colIndex = parseInt(col);
-        const cellValue = tableField.tableConfig.data?.[rowIndex]?.[colIndex];
-        
-        // Check if this cell has a formula
-        const column = tableField.tableConfig.columns?.[colIndex];
-        if (column && column.formula) {
-          // Evaluate the cell formula
-          const cellFormula = column.formula.replace(/row/g, rowIndex.toString());
-          try {
-            return evaluate(cellFormula).toString();
-          } catch (e) {
-            console.warn(`Error evaluating cell formula: ${e}`);
-            return '0';
-          }
-        }
-        
-        return (parseFloat(cellValue) || 0).toString();
-      }
-      return '0';
-    });
-    
-    const result = evaluate(processedFormula);
-    return typeof result === 'number' ? result : 0;
-  } catch (error) {
-    console.error('Formula evaluation error:', error);
-    return 0;
-  }
-};
-
-// Function to update calculated fields
-const updateCalculatedFields = (currentValues: Record<string, any>, allFields: Field[]): Record<string, any> => {
-  const updatedValues = { ...currentValues };
-  
-  // Find all fields with formulas and update their values
-  allFields.forEach(field => {
-    if (field.formula && field.formula.trim() && field.id) {
-      const calculatedValue = evaluateFormula(field.formula, allFields, updatedValues);
-      updatedValues[field.id] = calculatedValue;
-    }
-  });
-  
-  return updatedValues;
 };
 
 interface FieldManagerProps {
@@ -161,6 +85,266 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   const [selectedFields, setSelectedFields] = useState<string[]>([]);
   const [groupName, setGroupName] = useState('');
   const [additionalFields, setAdditionalFields] = useState<any[]>([]);
+  const [draggedItem, setDraggedItem] = useState<string | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+
+  // Drag and Drop handlers
+  const handleDragStart = (e: React.DragEvent, fieldId: string) => {
+    setDraggedItem(fieldId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, fieldId: string) => {
+    e.preventDefault();
+    setDragOverItem(fieldId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverItem(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetFieldId: string) => {
+    e.preventDefault();
+    
+    if (!draggedItem || draggedItem === targetFieldId) return;
+
+    const draggedIndex = fields.findIndex(f => f.id === draggedItem);
+    const targetIndex = fields.findIndex(f => f.id === targetFieldId);
+    
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newFields = [...fields];
+    const [draggedField] = newFields.splice(draggedIndex, 1);
+    newFields.splice(targetIndex, 0, draggedField);
+
+    // Update order property
+    const updatedFields = newFields.map((field, index) => ({
+      ...field,
+      order: index
+    }));
+
+    setFields(updatedFields);
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
+  // Field ordering functions
+  const moveFieldUp = (fieldId: string) => {
+    const currentIndex = fields.findIndex(f => f.id === fieldId);
+    if (currentIndex > 0) {
+      const newFields = [...fields];
+      [newFields[currentIndex - 1], newFields[currentIndex]] = [newFields[currentIndex], newFields[currentIndex - 1]];
+      
+      // Update order property
+      const updatedFields = newFields.map((field, index) => ({
+        ...field,
+        order: index
+      }));
+      
+      setFields(updatedFields);
+    }
+  };
+
+  const moveFieldDown = (fieldId: string) => {
+    const currentIndex = fields.findIndex(f => f.id === fieldId);
+    if (currentIndex < fields.length - 1) {
+      const newFields = [...fields];
+      [newFields[currentIndex], newFields[currentIndex + 1]] = [newFields[currentIndex + 1], newFields[currentIndex]];
+      
+      // Update order property
+      const updatedFields = newFields.map((field, index) => ({
+        ...field,
+        order: index
+      }));
+      
+      setFields(updatedFields);
+    }
+  };
+
+  // Toggle field visibility
+  const toggleFieldVisibility = (fieldId: string) => {
+    const updatedFields = fields.map(field => 
+      field.id === fieldId 
+        ? { ...field, visible: field.visible !== false ? false : true }
+        : field
+    );
+    setFields(updatedFields);
+  };
+
+  // Evaluate formula for a field
+  const evaluateFormula = (formula: string, fieldId: string, rowIndex?: number, evaluatingFields: Set<string> = new Set()): number | string => {
+    if (!formula) return '';
+    
+    // Prevent circular references
+    if (evaluatingFields.has(fieldId)) {
+      console.warn(`Circular reference detected for field: ${fieldId}`);
+      return 'Circular Ref';
+    }
+    
+    const currentEvaluatingFields = new Set(evaluatingFields);
+    currentEvaluatingFields.add(fieldId);
+    
+    try {
+      // Replace field IDs in formula with their values
+      let expression = formula;
+      
+      // Find all field references (including table cells and group fields)
+      const fieldReferences = formula.match(/\b[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)?(_\d+_\d+)?\b/g) || [];
+      
+      fieldReferences.forEach(ref => {
+        // Don't replace if it's the same field (to avoid circular reference)
+        if (ref === fieldId) return;
+        
+        let value = 0;
+        
+        // Handle table cell references with specific format (table.column)
+        if (ref.includes('.') && !ref.includes('_')) {
+          const [tableId, columnId] = ref.split('.');
+          const tableField = fields.find(f => f.id === tableId && f.type === 'table');
+          if (tableField && tableField.tableConfig?.columns) {
+            // Try to find column by exact ID match first
+            let columnIndex = tableField.tableConfig.columns.findIndex(col => col.id === columnId);
+            
+            // If not found by ID, try by generated ID from label
+            if (columnIndex === -1) {
+              columnIndex = tableField.tableConfig.columns.findIndex(col => 
+                generateIdFromLabel(col.label) === columnId
+              );
+            }
+            
+            if (columnIndex >= 0) {
+              const currentRowIndex = rowIndex ?? 0;
+              const cellKey = `${tableId}_${currentRowIndex}_${columnIndex}`;
+              const cellValue = previewValues[cellKey];
+              
+              // If cell has no value but column has a formula, evaluate it
+              if ((!cellValue || cellValue === '') && tableField.tableConfig.columns[columnIndex].formula) {
+                try {
+                  const column = tableField.tableConfig.columns[columnIndex];
+                  if (column.formula) {
+                    const calculatedValue = evaluateFormula(column.formula, `${tableId}.${column.id}`, currentRowIndex, currentEvaluatingFields);
+                    value = parseFloat(calculatedValue.toString()) || 0;
+                  }
+                } catch (error) {
+                  value = 0;
+                }
+              } else {
+                value = parseFloat(cellValue) || 0;
+              }
+            }
+          }
+        }
+        // Handle table cell references (e.g., table1_0_1)
+        else if (ref.includes('_') && /\d+_\d+$/.test(ref)) {
+          value = parseFloat(previewValues[ref]) || 0;
+        }
+        // Handle group field references (e.g., group1.field2)
+        else if (ref.includes('.')) {
+          const [groupId, subFieldId] = ref.split('.');
+          const groupData = previewValues[groupId] || {};
+          value = parseFloat(groupData[subFieldId]) || 0;
+        }
+        // Handle regular field references
+        else if (previewValues[ref] !== undefined) {
+          value = parseFloat(previewValues[ref]) || 0;
+        }
+        // Handle references to other formula fields
+        else {
+          const referencedField = fields.find(f => f.id === ref);
+          if (referencedField && referencedField.formula && referencedField.type === 'number') {
+            // Recursively evaluate the referenced formula field
+            try {
+              const calculatedValue = evaluateFormula(referencedField.formula, referencedField.id, rowIndex, currentEvaluatingFields);
+              value = parseFloat(calculatedValue.toString()) || 0;
+            } catch (error) {
+              value = 0;
+            }
+          }
+        }
+        
+        // Replace the reference with its value in the expression
+        expression = expression.replace(new RegExp(`\\b${ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), value.toString());
+      });
+      
+      // Evaluate the mathematical expression
+      const result = evaluate(expression);
+      return typeof result === 'number' ? parseFloat(result.toFixed(2)) : result;
+    } catch (error) {
+      return 'Error';
+    }
+  };
+
+  // Update field height
+  const updateFieldHeight = (fieldId: string, height: number) => {
+    const updatedFields = fields.map(field => 
+      field.id === fieldId 
+        ? { ...field, height: Math.max(20, Math.min(500, height)) } // Min 20px, Max 500px
+        : field
+    );
+    setFields(updatedFields);
+  };
+
+  // Table management functions
+  const addTableColumn = () => {
+    const newColumn = {
+      id: generateIdFromLabel(`column_${(currentField.tableConfig?.columns?.length || 0) + 1}`),
+      label: `Column ${(currentField.tableConfig?.columns?.length || 0) + 1}`,
+      width: 'auto',
+      type: 'text',
+      formula: '',
+      options: []
+    };
+
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: [...(currentField.tableConfig?.columns || []), newColumn]
+      }
+    });
+  };
+
+  const updateTableColumn = (index: number, updatedColumn: Partial<{ id: string; label: string; width: string; type: string; formula: string; options: string[] }>) => {
+    const newColumns = [...(currentField.tableConfig?.columns || [])];
+    const existingColumn = newColumns[index];
+    
+    // Ensure column always has an ID
+    let columnId = existingColumn?.id;
+    if (updatedColumn.label) {
+      columnId = generateIdFromLabel(updatedColumn.label);
+    } else if (!columnId) {
+      columnId = generateIdFromLabel(existingColumn?.label || `column_${index + 1}`);
+    }
+    
+    newColumns[index] = { 
+      ...existingColumn, 
+      ...updatedColumn,
+      id: columnId
+    };
+    
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: newColumns
+      }
+    });
+  };
+
+  const removeTableColumn = (index: number) => {
+    setCurrentField({
+      ...currentField,
+      tableConfig: {
+        ...currentField.tableConfig!,
+        columns: currentField.tableConfig?.columns?.filter((_, i) => i !== index) || []
+      }
+    });
+  };
 
   const getFieldColor = (fieldType: Field['type']) => {
     const colors = {
@@ -174,8 +358,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
       image: { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.1)' },
       list: { stroke: '#f97316', fill: 'rgba(249, 115, 22, 0.1)' },
       table: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' },
-      group: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' },
-      signature: { stroke: '#0ea5e9', fill: 'rgba(14, 165, 233, 0.1)' } // Added signature type
+      group: { stroke: '#9333ea', fill: 'rgba(147, 51, 234, 0.1)' }
     };
     return colors[fieldType];
   };
@@ -192,12 +375,19 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
 
   const addField = () => {
     const fieldId = generateIdFromLabel(currentField.label) || `field_${Date.now()}`;
-
+    
     if (editingField) {
       setFields(fields.map(f => f.id === editingField.id ? { ...currentField, id: fieldId } : f));
       setEditingField(null);
     } else {
-      setFields([...fields, { ...currentField, id: fieldId }]);
+      const newField = { 
+        ...currentField, 
+        id: fieldId,
+        order: fields.length,
+        height: currentField.height || 40,
+        visible: true
+      };
+      setFields([...fields, newField]);
     }
     setShowFieldModal(false);
     setCurrentField({
@@ -216,7 +406,12 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
       tableConfig: {
         rows: 1,
         columns: [],
-        data: []
+        data: [],
+        borderStyle: {
+          borderWidth: '1',
+          borderColor: '#000000',
+          borderStyle: 'solid'
+        }
       },
       groupConfig: {
         fields: [],
@@ -228,7 +423,8 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
         fontFamily: 'Palatino, "Palatino Linotype", serif',
         fontWeight: 'normal',
         fontStyle: 'normal'
-      }
+      },
+      formula: '' // Reset formula
     });
   };
 
@@ -245,6 +441,9 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
       required: false,
       coordinates: null, // Groups don't have visual coordinates
       page: 1,
+      order: remainingFields.length,
+      height: 100,
+      visible: true,
       groupConfig: {
         fields: fieldsToGroup,
         additionalFields: additionalFields
@@ -291,9 +490,11 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const addGroupField = () => {
+    if (!currentField.groupConfig) return;
+
     const newField: Field = {
-      id: generateIdFromLabel(`sub_field_${(currentField.groupConfig?.fields?.length ?? 0) + 1}`),
-      label: `Sub Field ${(currentField.groupConfig?.fields?.length ?? 0) + 1}`,
+      id: generateIdFromLabel(`sub_field_${currentField.groupConfig.fields.length + 1}`),
+      label: `Sub Field ${currentField.groupConfig.fields.length + 1}`,
       type: 'text',
       required: false,
       options: [],
@@ -311,20 +512,22 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
     setCurrentField({
       ...currentField,
       groupConfig: {
-        ...(currentField.groupConfig ?? { fields: [], additionalFields: [] }),
-        fields: [...(currentField.groupConfig?.fields ?? []), newField]
+        ...currentField.groupConfig,
+        fields: [...currentField.groupConfig.fields, newField]
       }
     });
   };
 
   const updateGroupField = (index: number, updatedField: Partial<Field>) => {
-    const newFields = [...(currentField.groupConfig?.fields ?? [])];
-    newFields[index] = {
-      ...newFields[index],
+    if (!currentField.groupConfig) return;
+
+    const newFields = [...currentField.groupConfig.fields];
+    newFields[index] = { 
+      ...newFields[index], 
       ...updatedField,
       id: updatedField.label ? generateIdFromLabel(updatedField.label) : newFields[index].id
     };
-
+    
     setCurrentField({
       ...currentField,
       groupConfig: {
@@ -335,90 +538,112 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
   };
 
   const removeGroupField = (index: number) => {
+    if (!currentField.groupConfig) return;
+
     setCurrentField({
       ...currentField,
       groupConfig: {
         ...currentField.groupConfig,
-        fields: (currentField.groupConfig?.fields ?? []).filter((_, i) => i !== index)
+        fields: currentField.groupConfig.fields.filter((_, i) => i !== index)
       }
     });
   };
 
   const renderFieldPreview = (field: Field) => {
+    const fieldHeight = field.height || 40;
+    const isVisible = field.visible !== false;
+    
+    if (!isVisible && !showPreviewMode) return null;
+
+    const fieldStyle = {
+      minHeight: `${fieldHeight}px`,
+      opacity: isVisible ? 1 : 0.5
+    };
+
+    // Calculate formula value for number fields
+    let computedValue = previewValues[field.id] || '';
+    if (field.formula && field.type === 'number') {
+      computedValue = evaluateFormula(field.formula, field.id);
+    }
+
     switch (field.type) {
       case 'text':
         return (
           <input
             type="text"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 placeholder-gray-400 transition"
-            placeholder={`Enter ${field.label}`}
-            value={field.formula ? evaluateFormula(field.formula, fields, previewValues).toString() : (previewValues[field.id] || '')}
-            onChange={(e) => {
-              if (!field.formula) {
-                const updatedValues = updateCalculatedFields({
-                  ...previewValues,
-                  [field.id]: e.target.value
-                }, fields);
-                setPreviewValues(updatedValues);
-              }
-            }}
-            readOnly={!!field.formula}
-            style={field.formula ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
+            className="w-full p-2 border rounded"
+            style={fieldStyle}
+            placeholder={`Enter ${field.label.toLowerCase()}`}
+            value={previewValues[field.id] || ''}
+            onChange={(e) => setPreviewValues({
+              ...previewValues,
+              [field.id]: e.target.value
+            })}
+            disabled={!isVisible}
           />
         );
       case 'number':
         return (
-          <input
-            type="number"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 transition"
-            value={field.formula ? evaluateFormula(field.formula, fields, previewValues) : (previewValues[field.id] || '')}
-            onChange={(e) => {
-              if (!field.formula) {
-                const updatedValues = updateCalculatedFields({
-                  ...previewValues,
-                  [field.id]: e.target.value
-                }, fields);
-                setPreviewValues(updatedValues);
-              }
-            }}
-            readOnly={!!field.formula}
-            style={field.formula ? { backgroundColor: '#f3f4f6', cursor: 'not-allowed' } : {}}
-          />
+          <div className="relative">
+            <input
+              type="number"
+              className={`w-full p-2 border rounded ${field.formula ? 'bg-blue-50 border-blue-300' : ''}`}
+              style={fieldStyle}
+              value={field.formula ? computedValue : (previewValues[field.id] || '')}
+              onChange={(e) => !field.formula && setPreviewValues({
+                ...previewValues,
+                [field.id]: e.target.value
+              })}
+              disabled={!isVisible || !!field.formula}
+              placeholder={field.formula ? 'Calculated' : 'Enter number'}
+            />
+            {field.formula && (
+              <div className="text-xs text-blue-600 mt-1">
+                📊 Formula: {field.formula}
+              </div>
+            )}
+          </div>
         );
       case 'email':
         return (
           <input
             type="email"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 placeholder-gray-400 transition"
+            className="w-full p-2 border rounded"
+            style={fieldStyle}
             placeholder="user@example.com"
             value={previewValues[field.id] || ''}
             onChange={(e) => setPreviewValues({
               ...previewValues,
               [field.id]: e.target.value
             })}
+            disabled={!isVisible}
           />
         );
       case 'date':
         return (
           <input
             type="date"
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 transition"
+            className="w-full p-2 border rounded"
+            style={fieldStyle}
             value={previewValues[field.id] || ''}
             onChange={(e) => setPreviewValues({
               ...previewValues,
               [field.id]: e.target.value
             })}
+            disabled={!isVisible}
           />
         );
       case 'select':
         return (
           <select
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 transition"
+            className="w-full p-2 border rounded"
+            style={fieldStyle}
             value={previewValues[field.id] || ''}
             onChange={(e) => setPreviewValues({
               ...previewValues,
               [field.id]: e.target.value
             })}
+            disabled={!isVisible}
           >
             <option value="">Select...</option>
             {field.options?.map((opt, i) => (
@@ -428,7 +653,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
         );
       case 'checkbox':
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" style={fieldStyle}>
             <input
               type="checkbox"
               checked={previewValues[field.id] || false}
@@ -436,71 +661,130 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 ...previewValues,
                 [field.id]: e.target.checked
               })}
-              className="w-5 h-5 border-gray-300 rounded focus:ring-2 focus:ring-blue-500 transition"
+              className="w-4 h-4"
+              disabled={!isVisible}
             />
-            <span className="text-sm text-gray-700 font-medium">Yes/No</span>
+            <span className="text-sm text-gray-600">Yes/No</span>
           </div>
         );
       case 'textarea':
         return (
           <textarea
-            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-900 placeholder-gray-400 transition"
-            rows={3}
-            placeholder={`Enter ${field.label}`}
+            className="w-full p-2 border rounded resize-none"
+            style={{ ...fieldStyle, minHeight: `${Math.max(fieldHeight, 60)}px` }}
+            rows={Math.max(3, Math.floor(fieldHeight / 20))}
+            placeholder={`Enter ${field.label.toLowerCase()}`}
             value={previewValues[field.id] || ''}
             onChange={(e) => setPreviewValues({
               ...previewValues,
               [field.id]: e.target.value
             })}
+            disabled={!isVisible}
           />
         );
       case 'table':
         return (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" style={fieldStyle}>
             <table className="w-full border-collapse">
               <tbody>
-                {field.tableConfig && Array(field.tableConfig.rows).fill(0).map((_, rowIndex) => (
+                {Array(field.tableConfig?.rows || 1).fill(0).map((_, rowIndex) => (
                   <tr key={rowIndex}>
-                    {field.tableConfig?.columns.map((col, colIndex) => (
-                      <td key={colIndex} className="p-2 border">
-                        <input
-                          type="text"
-                          className="w-full p-1 border rounded text-center"
-                          value={previewValues[`${field.id}_${rowIndex}_${colIndex}`] || ''}
-                          onChange={(e) => setPreviewValues({
-                            ...previewValues,
-                            [`${field.id}_${rowIndex}_${colIndex}`]: e.target.value
-                          })}
-                        />
-                      </td>
-                    ))}
+                    {field.tableConfig?.columns?.map((column, colIndex) => {
+                      const cellKey = `${field.id}_${rowIndex}_${colIndex}`;
+                      let cellValue = previewValues[cellKey] || '';
+                      
+                      // Calculate formula for number columns
+                      if (column.type === 'number' && column.formula) {
+                        try {
+                          cellValue = evaluateFormula(column.formula, `${field.id}.${column.id}`, rowIndex);
+                        } catch (error) {
+                          cellValue = 'Error';
+                        }
+                      }
+                      
+                      return (
+                        <td key={colIndex} className="p-2 border">
+                          {column.type === 'number' ? (
+                            <input
+                              type="number"
+                              className={`w-full p-1 border rounded text-center ${column.formula ? 'bg-blue-50 border-blue-300' : ''}`}
+                              value={cellValue}
+                              onChange={(e) => !column.formula && setPreviewValues({
+                                ...previewValues,
+                                [cellKey]: e.target.value
+                              })}
+                              disabled={!isVisible || !!column.formula}
+                              placeholder={column.formula ? 'Calculated' : '0'}
+                            />
+                          ) : column.type === 'date' ? (
+                            <input
+                              type="date"
+                              className="w-full p-1 border rounded text-center"
+                              value={previewValues[cellKey] || ''}
+                              onChange={(e) => setPreviewValues({
+                                ...previewValues,
+                                [cellKey]: e.target.value
+                              })}
+                              disabled={!isVisible}
+                            />
+                          ) : column.type === 'select' ? (
+                            <select
+                              className="w-full p-1 border rounded text-center"
+                              value={previewValues[cellKey] || ''}
+                              onChange={(e) => setPreviewValues({
+                                ...previewValues,
+                                [cellKey]: e.target.value
+                              })}
+                              disabled={!isVisible}
+                            >
+                              <option value="">Select...</option>
+                              {column.options?.map((opt, i) => (
+                                <option key={i} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type="text"
+                              className="w-full p-1 border rounded text-center"
+                              value={previewValues[cellKey] || ''}
+                              onChange={(e) => setPreviewValues({
+                                ...previewValues,
+                                [cellKey]: e.target.value
+                              })}
+                              disabled={!isVisible}
+                            />
+                          )}
+                          {column.formula && (
+                            <div className="text-xs text-blue-600 mt-1 text-center">
+                              📊 {column.formula}
+                            </div>
+                          )}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
-            {field.tableConfig && (
-              <button
-                className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-                onClick={() => {
-                  const newField = { ...field };
-                  newField.tableConfig = {
-                    ...newField.tableConfig,
-                    rows: (newField.tableConfig?.rows ?? 0) + 1,
-                    columns: newField.tableConfig?.columns ?? [],
-                    data: newField.tableConfig?.data ?? []
-                  };
+            <button
+              className="mt-2 text-sm text-blue-600 hover:text-blue-800"
+              onClick={() => {
+                const newField = {...field};
+                if (newField.tableConfig) {
+                  newField.tableConfig.rows += 1;
                   setFields(fields.map(f => f.id === field.id ? newField : f));
-                }}
-              >
-                <Plus size={16} className="inline mr-1" />
-                Add Row
-              </button>
-            )}
+                }
+              }}
+              disabled={!isVisible}
+            >
+              <Plus size={16} className="inline mr-1" />
+              Add Row
+            </button>
           </div>
         );
       case 'image':
         return (
-          <div className="space-y-2">
+          <div className="space-y-2" style={fieldStyle}>
             <input
               type="file"
               accept="image/*"
@@ -519,6 +803,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
               }}
               className="hidden"
               id={`image-upload-${field.id}`}
+              disabled={!isVisible}
             />
             <div className="border rounded p-4 text-center">
               {previewValues[field.id] ? (
@@ -527,6 +812,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                     src={previewValues[field.id]}
                     alt="Preview"
                     className="max-h-32 mx-auto"
+                    style={{ opacity: isVisible ? 1 : 0.5 }}
                   />
                   <button
                     onClick={() => setPreviewValues({
@@ -534,6 +820,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       [field.id]: null
                     })}
                     className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    disabled={!isVisible}
                   >
                     <X size={16} />
                   </button>
@@ -541,7 +828,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
               ) : (
                 <label
                   htmlFor={`image-upload-${field.id}`}
-                  className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                  className={`cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center ${!isVisible ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Upload size={24} />
                   <span className="text-sm mt-1">Upload Image</span>
@@ -550,150 +837,23 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
             </div>
           </div>
         );
-      case 'signature':
-        return (
-          <div className="border rounded p-4 space-y-3 bg-gray-50">
-            <div className="flex justify-between items-center">
-              <h4 className="font-medium text-gray-800">Signature Details</h4>
-              <button
-                className="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-sm"
-                onClick={() => {
-                  // Handle signature capture
-                  const canvas = document.createElement('canvas');
-                  canvas.width = 300;
-                  canvas.height = 150;
-                  const ctx = canvas.getContext('2d');
-                  if (ctx) {
-                    ctx.fillStyle = '#f9fafb';
-                    ctx.fillRect(0, 0, canvas.width, canvas.height);
-                    ctx.strokeStyle = '#4b5563';
-                    ctx.lineWidth = 2;
-                    ctx.font = '14px Arial';
-                    ctx.fillStyle = '#4b5563';
-                    ctx.textAlign = 'center';
-                    ctx.fillText('Click to sign here', canvas.width / 2, canvas.height / 2);
-                  }
-
-                  const newSignature = {
-                    ...(previewValues[field.id] || {}),
-                    img: canvas.toDataURL()
-                  };
-
-                  setPreviewValues({
-                    ...previewValues,
-                    [field.id]: newSignature
-                  });
-                }}
-              >
-                <Pen size={14} />
-                <span>Sign</span>
-              </button>
-            </div>
-
-            <div className="space-y-2">
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">Full Name</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.name || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        name: e.target.value
-                      }
-                    });
-                  }}
-                  placeholder="Enter your full name"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">ID / Position</label>
-                <input
-                  type="text"
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.id || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        id: e.target.value
-                      }
-                    });
-                  }}
-                  placeholder="Enter your ID or position"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs text-gray-600 mb-1 block">Status</label>
-                <select
-                  className="w-full p-2 border rounded"
-                  value={(previewValues[field.id]?.status || '')}
-                  onChange={(e) => {
-                    setPreviewValues({
-                      ...previewValues,
-                      [field.id]: {
-                        ...(previewValues[field.id] || {}),
-                        status: e.target.value
-                      }
-                    });
-                  }}
-                >
-                  <option value="">Select status...</option>
-                  <option value="Approved">Approved</option>
-                  <option value="Rejected">Rejected</option>
-                  <option value="Pending">Pending</option>
-                  <option value="For Review">For Review</option>
-                </select>
-              </div>
-
-              {previewValues[field.id]?.img && (
-                <div className="relative">
-                  <img
-                    src={previewValues[field.id].img}
-                    alt="Signature"
-                    className="border rounded w-full max-h-24 object-contain bg-white"
-                  />
-                  <button
-                    onClick={() => {
-                      const newValue = { ...previewValues[field.id] };
-                      delete newValue.img;
-                      setPreviewValues({
-                        ...previewValues,
-                        [field.id]: newValue
-                      });
-                    }}
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1"
-                  >
-                    <X size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
       case 'group':
         const groupData = previewValues[field.id] || {};
-
+        
         return (
-          <div className="border rounded p-3 bg-gray-50">
+          <div className="border rounded p-3 bg-gray-50" style={fieldStyle}>
             <div className="font-medium text-gray-800 mb-3">{field.label}</div>
-
+            
             {/* Existing grouped fields (visible on PDF) */}
             <div className="space-y-3">
               <div className="text-sm font-medium text-gray-600 mb-2">Visual Fields (shown on PDF):</div>
-              {field.groupConfig?.fields?.map((subField, index) => (
+              {field.groupConfig?.fields?.map((subField) => (
                 <div key={subField.id} className="space-y-1 bg-white p-2 rounded border">
                   <label className="text-sm font-medium text-gray-600">
                     {subField.label}
                     {subField.required && <span className="text-red-500 ml-1">*</span>}
                   </label>
-
+                  
                   {subField.type === 'text' && (
                     <input
                       type="text"
@@ -706,22 +866,35 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           [subField.id]: e.target.value
                         }
                       })}
+                      disabled={!isVisible}
                     />
                   )}
-
+                  
                   {subField.type === 'number' && (
-                    <input
-                      type="number"
-                      className="w-full p-2 border rounded"
-                      value={groupData[subField.id] || ''}
-                      onChange={(e) => setPreviewValues({
-                        ...previewValues,
-                        [field.id]: {
-                          ...groupData,
-                          [subField.id]: e.target.value
+                    <div className="relative">
+                      <input
+                        type="number"
+                        className={`w-full p-2 border rounded ${subField.formula ? 'bg-blue-50 border-blue-300' : ''}`}
+                        value={subField.formula 
+                          ? evaluateFormula(subField.formula, `${field.id}.${subField.id}`)
+                          : (groupData[subField.id] || '')
                         }
-                      })}
-                    />
+                        onChange={(e) => !subField.formula && setPreviewValues({
+                          ...previewValues,
+                          [field.id]: {
+                            ...groupData,
+                            [subField.id]: e.target.value
+                          }
+                        })}
+                        disabled={!isVisible || !!subField.formula}
+                        placeholder={subField.formula ? 'Calculated' : 'Enter number'}
+                      />
+                      {subField.formula && (
+                        <div className="text-xs text-blue-600 mt-1">
+                          📊 Formula: {subField.formula}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {subField.type === 'email' && (
@@ -737,6 +910,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           [subField.id]: e.target.value
                         }
                       })}
+                      disabled={!isVisible}
                     />
                   )}
 
@@ -752,9 +926,10 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           [subField.id]: e.target.value
                         }
                       })}
+                      disabled={!isVisible}
                     />
                   )}
-
+                  
                   {subField.type === 'checkbox' && (
                     <div className="flex items-center gap-2">
                       <input
@@ -768,11 +943,12 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           }
                         })}
                         className="w-4 h-4"
+                        disabled={!isVisible}
                       />
                       <span className="text-sm text-gray-600">Yes/No</span>
                     </div>
                   )}
-
+                  
                   {subField.type === 'select' && (
                     <select
                       className="w-full p-2 border rounded"
@@ -784,6 +960,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           [subField.id]: e.target.value
                         }
                       })}
+                      disabled={!isVisible}
                     >
                       <option value="">Select...</option>
                       {subField.options?.map((opt, i) => (
@@ -791,7 +968,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                       ))}
                     </select>
                   )}
-
+                  
                   {subField.type === 'textarea' && (
                     <textarea
                       className="w-full p-2 border rounded"
@@ -804,6 +981,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           [subField.id]: e.target.value
                         }
                       })}
+                      disabled={!isVisible}
                     />
                   )}
 
@@ -830,6 +1008,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                         }}
                         className="hidden"
                         id={`group-image-upload-${field.id}-${subField.id}`}
+                        disabled={!isVisible}
                       />
                       <div className="border rounded p-4 text-center">
                         {groupData[subField.id] ? (
@@ -838,6 +1017,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                               src={groupData[subField.id]}
                               alt="Preview"
                               className="max-h-32 mx-auto"
+                              style={{ opacity: isVisible ? 1 : 0.5 }}
                             />
                             <button
                               onClick={() => setPreviewValues({
@@ -848,6 +1028,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                                 }
                               })}
                               className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              disabled={!isVisible}
                             >
                               <X size={16} />
                             </button>
@@ -855,7 +1036,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                         ) : (
                           <label
                             htmlFor={`group-image-upload-${field.id}-${subField.id}`}
-                            className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                            className={`cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center ${!isVisible ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
                             <Upload size={24} />
                             <span className="text-sm mt-1">Upload Image</span>
@@ -867,18 +1048,18 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 </div>
               ))}
             </div>
-
+            
             {/* Additional fields (non-visual) */}
-            {(field.groupConfig?.additionalFields?.length ?? 0) > 0 && (
+            {field.groupConfig?.additionalFields && field.groupConfig.additionalFields.length > 0 && (
               <div className="mt-4 space-y-3">
                 <div className="text-sm font-medium text-gray-600 mb-2">Additional Fields (data only):</div>
-                {field.groupConfig?.additionalFields?.map((addField, index) => (
+                {field.groupConfig.additionalFields.map((addField) => (
                   <div key={addField.id} className="space-y-1 bg-blue-50 p-2 rounded border">
                     <label className="text-sm font-medium text-gray-600">
                       {addField.label}
                       {addField.required && <span className="text-red-500 ml-1">*</span>}
                     </label>
-
+                    
                     {addField.type === 'text' && (
                       <input
                         type="text"
@@ -891,22 +1072,35 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             [addField.id]: e.target.value
                           }
                         })}
+                        disabled={!isVisible}
                       />
                     )}
-
+                    
                     {addField.type === 'number' && (
-                      <input
-                        type="number"
-                        className="w-full p-2 border rounded"
-                        value={groupData[addField.id] || ''}
-                        onChange={(e) => setPreviewValues({
-                          ...previewValues,
-                          [field.id]: {
-                            ...groupData,
-                            [addField.id]: e.target.value
+                      <div className="relative">
+                        <input
+                          type="number"
+                          className={`w-full p-2 border rounded ${addField.formula ? 'bg-blue-50 border-blue-300' : ''}`}
+                          value={addField.formula 
+                            ? evaluateFormula(addField.formula, `${field.id}.${addField.id}`)
+                            : (groupData[addField.id] || '')
                           }
-                        })}
-                      />
+                          onChange={(e) => !addField.formula && setPreviewValues({
+                            ...previewValues,
+                            [field.id]: {
+                              ...groupData,
+                              [addField.id]: e.target.value
+                            }
+                          })}
+                          disabled={!isVisible || !!addField.formula}
+                          placeholder={addField.formula ? 'Calculated' : 'Enter number'}
+                        />
+                        {addField.formula && (
+                          <div className="text-xs text-blue-600 mt-1">
+                            📊 Formula: {addField.formula}
+                          </div>
+                        )}
+                      </div>
                     )}
 
                     {addField.type === 'email' && (
@@ -922,6 +1116,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             [addField.id]: e.target.value
                           }
                         })}
+                        disabled={!isVisible}
                       />
                     )}
 
@@ -937,6 +1132,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             [addField.id]: e.target.value
                           }
                         })}
+                        disabled={!isVisible}
                       />
                     )}
 
@@ -952,9 +1148,10 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             [addField.id]: e.target.value
                           }
                         })}
+                        disabled={!isVisible}
                       />
                     )}
-
+                    
                     {addField.type === 'select' && (
                       <select
                         className="w-full p-2 border rounded"
@@ -966,14 +1163,15 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             [addField.id]: e.target.value
                           }
                         })}
+                        disabled={!isVisible}
                       >
                         <option value="">Select...</option>
-                        {addField.options?.map((opt: any, i: any) => (
+                        {addField.options?.map((opt: string, i: number) => (
                           <option key={i} value={opt}>{opt}</option>
                         ))}
                       </select>
                     )}
-
+                    
                     {addField.type === 'checkbox' && (
                       <div className="flex items-center gap-2">
                         <input
@@ -987,6 +1185,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             }
                           })}
                           className="w-4 h-4"
+                          disabled={!isVisible}
                         />
                         <span className="text-sm text-gray-600">Yes/No</span>
                       </div>
@@ -1015,6 +1214,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           }}
                           className="hidden"
                           id={`additional-image-upload-${field.id}-${addField.id}`}
+                          disabled={!isVisible}
                         />
                         <div className="border rounded p-4 text-center">
                           {groupData[addField.id] ? (
@@ -1023,6 +1223,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                                 src={groupData[addField.id]}
                                 alt="Preview"
                                 className="max-h-32 mx-auto"
+                                style={{ opacity: isVisible ? 1 : 0.5 }}
                               />
                               <button
                                 onClick={() => setPreviewValues({
@@ -1033,6 +1234,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                                   }
                                 })}
                                 className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                disabled={!isVisible}
                               >
                                 <X size={16} />
                               </button>
@@ -1040,7 +1242,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           ) : (
                             <label
                               htmlFor={`additional-image-upload-${field.id}-${addField.id}`}
-                              className="cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center"
+                              className={`cursor-pointer text-blue-600 hover:text-blue-800 flex flex-col items-center ${!isVisible ? 'opacity-50 cursor-not-allowed' : ''}`}
                             >
                               <Upload size={24} />
                               <span className="text-sm mt-1">Upload Image</span>
@@ -1078,44 +1280,126 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
           )}
         </div>
         
-        {fields.map(field => (
-          <div key={field.id} className="mb-4 hover:bg-slate-400/10 p-3 rounded-sm cursor-pointer last:mb-0">
+        {fields.map((field, index) => (
+          <div 
+            key={field.id} 
+            className={`mb-4 p-3 rounded-sm cursor-pointer last:mb-0 transition-all duration-200 ${
+              draggedItem === field.id ? 'opacity-50' : ''
+            } ${
+              dragOverItem === field.id ? 'border-2 border-blue-500 bg-blue-50' : 'hover:bg-slate-400/10 border border-transparent'
+            } ${
+              field.visible === false ? 'bg-gray-100 opacity-75' : ''
+            }`}
+            draggable={!showPreviewMode}
+            onDragStart={(e) => handleDragStart(e, field.id)}
+            onDragEnd={handleDragEnd}
+            onDragOver={(e) => handleDragOver(e, field.id)}
+            onDragLeave={handleDragLeave}
+            onDrop={(e) => handleDrop(e, field.id)}
+          >
             <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2">
-                <span
-                  className="w-3 h-3 rounded-sm border-2"
-                  style={{
+              <div className="flex items-center gap-2 flex-1">
+                {!showPreviewMode && (
+                  <GripVertical 
+                    size={16} 
+                    className="text-gray-400 cursor-grab active:cursor-grabbing flex-shrink-0" 
+                  />
+                )}
+                <span 
+                  className="w-3 h-3 rounded-sm border-2 flex-shrink-0"
+                  style={{ 
                     borderColor: getFieldColor(field.type).stroke,
                     backgroundColor: getFieldColor(field.type).fill
                   }}
                 />
-                <span className="font-medium text-sm">
-                  {field.label}
-                  {field.required && <span className="text-red-500 ml-1">*</span>}
-                  {field.type === 'group' && (
-                    <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
-                      GROUP ({field.groupConfig?.fields?.length || 0} visual + {field.groupConfig?.additionalFields?.length || 0} data)
-                    </span>
+                <div className="flex-1">
+                  <span className="font-medium text-sm">
+                    {field.label}
+                    {field.required && <span className="text-red-500 ml-1">*</span>}
+                    {field.type === 'group' && (
+                      <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded">
+                        GROUP ({field.groupConfig?.fields?.length || 0} visual + {field.groupConfig?.additionalFields?.length || 0} data)
+                      </span>
+                    )}
+                    {field.visible === false && (
+                      <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">
+                        HIDDEN
+                      </span>
+                    )}
+                  </span>
+                  
+                  {/* Field height control in edit mode */}
+                  {!showPreviewMode && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="flex items-center gap-2">
+                        <label className="text-xs text-gray-600">Height:</label>
+                        <input
+                          type="number"
+                          min="20"
+                          max="500"
+                          value={field.height || 40}
+                          onChange={(e) => updateFieldHeight(field.id, parseInt(e.target.value))}
+                          className="w-16 px-2 py-1 text-xs border rounded"
+                        />
+                        <span className="text-xs text-gray-500">px</span>
+                      </div>
+                    </div>
                   )}
-                </span>
+                </div>
               </div>
+              
               {!showPreviewMode && (
-                <div className="flex gap-2">
+                <div className="flex gap-1 items-center">
+                  {/* Visibility toggle */}
+                  <button
+                    onClick={() => toggleFieldVisibility(field.id)}
+                    className={`p-1 rounded ${field.visible === false ? 'text-gray-400 hover:text-gray-600' : 'text-blue-600 hover:text-blue-800'}`}
+                    title={field.visible === false ? 'Show field' : 'Hide field'}
+                  >
+                    {field.visible === false ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
+                  
+                  {/* Move up */}
+                  <button
+                    onClick={() => moveFieldUp(field.id)}
+                    disabled={index === 0}
+                    className="p-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                    title="Move up"
+                  >
+                    <ChevronUp size={16} />
+                  </button>
+                  
+                  {/* Move down */}
+                  <button
+                    onClick={() => moveFieldDown(field.id)}
+                    disabled={index === fields.length - 1}
+                    className="p-1 text-gray-600 hover:text-gray-800 disabled:text-gray-300 disabled:cursor-not-allowed"
+                    title="Move down"
+                  >
+                    <ChevronDown size={16} />
+                  </button>
+                  
+                  {/* Edit */}
                   <button
                     onClick={() => editField(field)}
-                    className="text-blue-600 hover:text-blue-800"
+                    className="p-1 text-blue-600 hover:text-blue-800"
+                    title="Edit field"
                   >
                     <Edit size={16} />
                   </button>
+                  
+                  {/* Delete */}
                   <button
                     onClick={() => removeField(field.id)}
-                    className="text-red-600 hover:text-red-800"
+                    className="p-1 text-red-600 hover:text-red-800"
+                    title="Delete field"
                   >
                     <Trash2 size={16} />
                   </button>
                 </div>
               )}
             </div>
+            
             {showPreviewMode ? (
               <div className="mt-1">
                 {renderFieldPreview(field)}
@@ -1127,15 +1411,20 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 {field.type === 'group' && field.groupConfig && (
                   <div className="mt-1">
                     <div>Visual fields: {field.groupConfig.fields?.map(f => f.label).join(', ')}</div>
-                    {(field.groupConfig?.additionalFields?.length ?? 0) > 0 && (
-                      <div>Data fields: {field.groupConfig?.additionalFields?.map(f => f.label).join(', ')}</div>
+                    {field.groupConfig?.additionalFields && field.groupConfig.additionalFields.length > 0 && (
+                      <div>Data fields: {field.groupConfig.additionalFields.map(f => f.label).join(', ')}</div>
                     )}
                   </div>
+                )}
+                <div className="mt-1">Height: {field.height || 40}px</div>
+                {field.formula && (
+                  <div className="mt-1 text-blue-600">Formula: {field.formula}</div>
                 )}
               </div>
             )}
           </div>
         ))}
+        
         {fields.length === 0 && (
           <div className="text-center text-gray-500 py-4">
             No fields added yet. Click "Add Field" to start.
@@ -1161,7 +1450,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                 <X size={20} />
               </button>
             </div>
-
+            
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -1197,9 +1486,9 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                         className="w-4 h-4"
                       />
                       <label htmlFor={`field-${field.id}`} className="flex items-center gap-2 cursor-pointer">
-                        <span
+                        <span 
                           className="w-3 h-3 rounded-sm border-2"
-                          style={{
+                          style={{ 
                             borderColor: getFieldColor(field.type).stroke,
                             backgroundColor: getFieldColor(field.type).fill
                           }}
@@ -1224,7 +1513,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                     Add Field
                   </button>
                 </div>
-
+                
                 <div className="space-y-3 max-h-60 overflow-y-auto">
                   {additionalFields.map((field, index) => (
                     <div key={index} className="border rounded p-3 bg-blue-50">
@@ -1237,7 +1526,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           <Trash2 size={16} />
                         </button>
                       </div>
-
+                      
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className="text-xs text-gray-600">Label</label>
@@ -1249,7 +1538,7 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                             placeholder="Field label"
                           />
                         </div>
-
+                        
                         <div>
                           <label className="text-xs text-gray-600">Type</label>
                           <select
@@ -1268,15 +1557,15 @@ export const FieldManager: React.FC<FieldManagerProps> = ({
                           </select>
                         </div>
                       </div>
-
+                      
                       {field.type === 'select' && (
                         <div className="mt-2">
                           <label className="text-xs text-gray-600">Options (comma-separated)</label>
                           <input
                             type="text"
                             value={field.options?.join(', ') || ''}
-                            onChange={(e) => updateAdditionalField(index, {
-                              options: e.target.value.split(',').map(opt => opt.trim()).filter(opt => opt)
+                            onChange={(e) => updateAdditionalField(index, { 
+                              options: e.target.value.split(',').map(opt => opt.trim()).filter(opt => opt) 
                             })}
                             className="w-full p-2 border rounded"
                             placeholder="Option 1, Option 2, Option 3"

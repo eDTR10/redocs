@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { evaluate } from 'mathjs';
 
+// Field interface definition
 export interface Field {
   id: string;
   label: string;
@@ -9,6 +10,7 @@ export interface Field {
   options?: string[];
   coordinates: { x: number; y: number; width: number; height: number } | null;
   page: number;
+  formula?: string; // For arithmetic operations like Excel
   listConfig?: {
     minItems: number;
     maxItems: number;
@@ -16,8 +18,13 @@ export interface Field {
   };
   tableConfig?: {
     rows: number;
-    columns: any[];
+    columns: { id: string; label: string; width?: string; type?: string; formula?: string; options?: string[] }[];
     data: any[];
+    borderStyle?: {
+      borderWidth: string;
+      borderColor: string;
+      borderStyle: 'solid' | 'dashed' | 'dotted' | 'none';
+    };
   };
   groupConfig?: {
     fields: Field[];
@@ -30,41 +37,38 @@ export interface Field {
     fontWeight: string;
     fontStyle: string;
   };
-  formula?: string; // For arithmetic calculations
+  // New properties for field management
+  order?: number;
+  height?: number;
+  visible?: boolean;
 }
 
-// Helper function to generate ID from label
-function generateIdFromLabel(label: string): string {
-  return label
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, '') // Remove special characters
-    .replace(/\s+/g, '_') // Replace spaces with underscores
-    .replace(/_{2,}/g, '_') // Replace multiple underscores with single
-    .replace(/^_|_$/g, ''); // Remove leading/trailing underscores
-}
 
-// Updated formula evaluation function to handle table column references
-function evaluateFormula(formula: string, fieldId: string, values: Record<string, any>, fields?: Field[], currentRow?: number, currentTableField?: Field): number | string {
-  if (!formula) return '';
+
+// Formula evaluation function with circular reference protection
+const evaluateFormula = (formula: string, fields: Field[], previewValues: Record<string, any>, evaluating = new Set<string>(), currentRow?: number, currentTableField?: Field): number | null => {
+  if (!formula.trim()) return null;
   
   try {
     let processedFormula = formula;
+    let hasValidData = false; // Track if we have any actual data
     
     // Handle table column references (table.columnName format)
     if (currentRow !== undefined && currentTableField?.tableConfig) {
       const tableColumnRegex = /table\.(\w+)/g;
       processedFormula = processedFormula.replace(tableColumnRegex, (match, columnName) => {
         // Find the column index by name (case-insensitive)
-        const columnIndex = currentTableField.tableConfig.columns.findIndex(
+        const columnIndex = currentTableField.tableConfig!.columns.findIndex(
           col => col.label.toLowerCase().replace(/\s+/g, '') === columnName.toLowerCase()
         );
         
         if (columnIndex !== -1) {
           const cellKey = `${currentTableField.id}_${currentRow}_${columnIndex}`;
-          const cellValue = values[cellKey];
+          const cellValue = previewValues[cellKey];
           console.log(`PDF Table formula: ${match} -> ${cellKey} = ${cellValue}`);
           
-          if (cellValue !== undefined && cellValue !== '') {
+          if (cellValue !== undefined && cellValue !== '' && cellValue !== null) {
+            hasValidData = true;
             const numericValue = parseFloat(cellValue) || 0;
             return numericValue.toString();
           }
@@ -76,62 +80,73 @@ function evaluateFormula(formula: string, fieldId: string, values: Record<string
     }
     
     // Replace field references with their values
-    if (fields) {
-      fields.forEach(field => {
-        if (!field.id) return;
+    fields.forEach(field => {
+      if (!field.id) return;
+      
+      // Check for circular reference
+      if (evaluating.has(field.id)) {
+        console.warn(`Circular reference detected for field: ${field.id}`);
+        return;
+      }
+      
+      const fieldRegex = new RegExp(`\\b${field.id}\\b`, 'g');
+      if (processedFormula.match(fieldRegex)) {
+        let fieldValue = 0;
         
-        const fieldRegex = new RegExp(`\\b${field.id}\\b`, 'g');
-        if (processedFormula.match(fieldRegex)) {
-          let fieldValue = 0;
-          
-          if (field.formula && field.formula.trim()) {
-            // This is a calculated field, evaluate its formula first
-            fieldValue = evaluateFormula(field.formula, field.id, values, fields);
-          } else {
-            // Regular field, get its value
-            fieldValue = parseFloat(values[field.id] || '0') || 0;
+        if (field.formula && field.formula.trim()) {
+          // This is a calculated field, evaluate its formula first
+          evaluating.add(field.id);
+          const result = evaluateFormula(field.formula, fields, previewValues, evaluating);
+          evaluating.delete(field.id);
+          fieldValue = result !== null ? result : 0;
+        } else {
+          // Regular field, get its value
+          const rawValue = previewValues[field.id];
+          if (rawValue !== undefined && rawValue !== '' && rawValue !== null) {
+            hasValidData = true;
+            fieldValue = parseFloat(rawValue) || 0;
           }
-          
-          processedFormula = processedFormula.replace(fieldRegex, fieldValue.toString());
         }
-      });
-    }
+        
+        processedFormula = processedFormula.replace(fieldRegex, fieldValue.toString());
+      }
+    });
     
     // Handle table field references (table_row_col format)
     const tableFieldRegex = /table_(\d+)_(\d+)/g;
-    processedFormula = processedFormula.replace(tableFieldRegex, (match, row, col) => {
+    processedFormula = processedFormula.replace(tableFieldRegex, (_, row, col) => {
+      // Find any table field and try to get the cell value
       const rowIndex = parseInt(row);
       const colIndex = parseInt(col);
       
       console.log(`PDF: Looking for table cell: table_${rowIndex}_${colIndex}`);
       
       // Look for cell values in the format: tableFieldId_row_col
-      if (fields) {
-        for (const field of fields) {
-          if (field.type === 'table' && field.id) {
-            const cellKey = `${field.id}_${rowIndex}_${colIndex}`;
-            const cellValue = values[cellKey];
-            console.log(`PDF: Checking field ${field.id}, key: ${cellKey}, value:`, cellValue);
-            
-            if (cellValue !== undefined && cellValue !== '') {
-              // Check if this cell has a formula
-              const column = field.tableConfig?.columns?.[colIndex];
-              if (column && column.formula) {
-                // Evaluate the cell formula
-                const cellFormula = column.formula.replace(/row/g, rowIndex.toString());
-                try {
-                  const result = evaluate(cellFormula);
-                  return result.toString();
-                } catch (e) {
-                  console.warn(`PDF: Error evaluating cell formula: ${e}`);
-                  return '0';
-                }
+      for (const field of fields) {
+        if (field.type === 'table' && field.id) {
+          const cellKey = `${field.id}_${rowIndex}_${colIndex}`;
+          const cellValue = previewValues[cellKey];
+          console.log(`PDF: Checking field ${field.id}, key: ${cellKey}, value:`, cellValue);
+          
+          if (cellValue !== undefined && cellValue !== '' && cellValue !== null) {
+            hasValidData = true;
+            // Check if this cell has a formula
+            const column = field.tableConfig?.columns?.[colIndex];
+            if (column && column.formula) {
+              // Evaluate the cell formula
+              const cellFormula = column.formula.replace(/row/g, rowIndex.toString());
+              try {
+                const result = evaluate(cellFormula);
+                return result.toString();
+              } catch (e) {
+                console.warn(`PDF: Error evaluating cell formula: ${e}`);
+                return '0';
               }
-              
-              const numericValue = parseFloat(cellValue) || 0;
-              console.log(`PDF: Returning numeric value: ${numericValue}`);
-              return numericValue.toString();
             }
+            
+            const numericValue = parseFloat(cellValue) || 0;
+            console.log(`PDF: Returning numeric value: ${numericValue}`);
+            return numericValue.toString();
           }
         }
       }
@@ -140,15 +155,21 @@ function evaluateFormula(formula: string, fieldId: string, values: Record<string
       return '0';
     });
     
+    // If no valid data was found in any of the referenced fields, return null
+    if (!hasValidData) {
+      console.log(`PDF: No valid data found for formula, returning null`);
+      return null;
+    }
+    
     console.log(`PDF: Final processed formula: ${processedFormula}`);
     
     const result = evaluate(processedFormula);
-    return typeof result === 'number' ? parseFloat(result.toFixed(2)) : result;
+    return typeof result === 'number' ? result : null;
   } catch (error) {
     console.error('PDF Formula evaluation error:', error);
-    return 'Error';
+    return null;
   }
-}
+};
 
 // Helper function to get PDF font based on fontFamily, fontWeight, and fontStyle
 function getPDFFont(pdfDoc: PDFDocument, fontFamily: string, fontWeight: string, fontStyle: string) {
@@ -214,8 +235,9 @@ async function renderSingleField(
   try {
     // Handle formula evaluation for number and text fields
     let displayValue = value;
-    if ((field.type === 'number' || field.type === 'text') && field.formula) {
-      displayValue = evaluateFormula(field.formula, field.id, values, allFields);
+    if ((field.type === 'number' || field.type === 'text') && field.formula && allFields) {
+      const formulaResult = evaluateFormula(field.formula, allFields, values);
+      displayValue = formulaResult !== null ? formulaResult.toString() : '';
     }
 
     switch (field.type) {
@@ -224,7 +246,7 @@ async function renderSingleField(
       case 'email':
       case 'date':
       case 'select':
-        if (displayValue !== undefined && displayValue !== '') {
+        if (displayValue !== undefined && displayValue !== '' && displayValue !== null) {
           page.drawText(String(displayValue || ''), {
             x: pdfX + 2,
             y: pdfY + (pdfHeight / 2) - (fontSize / 2),
@@ -336,10 +358,11 @@ async function renderSingleField(
           
           // If columns have configured widths, use proportional distribution
           let columnWidths = [];
-          const totalConfigWidth = field.tableConfig.columns.reduce((sum, col) => sum + (col.width || 1), 0);
+          const totalConfigWidth = field.tableConfig.columns.reduce((sum, col) => sum + (typeof col.width === 'number' ? col.width : 1), 0);
           
           for (let i = 0; i < totalColumns; i++) {
-            const configWidth = field.tableConfig.columns[i].width || 1;
+            const columnWidth = field.tableConfig.columns[i]?.width;
+            const configWidth = typeof columnWidth === 'number' ? columnWidth : 1;
             const proportionalWidth = (configWidth / totalConfigWidth) * availableWidth;
             columnWidths.push(proportionalWidth);
           }
@@ -356,21 +379,29 @@ async function renderSingleField(
           
           for (let row = 0; row < field.tableConfig.rows; row++) {
             let maxRowHeight = baseCellHeight;
+            let rowHasContent = false;
             
             field.tableConfig.columns.forEach((col, colIndex) => {
               let cellValue = values[`${field.id}_${row}_${colIndex}`] || '';
               
               // Check if this column has a formula
-              if (col.formula && col.formula.trim()) {
+              if (col.formula && col.formula.trim() && allFields) {
                 console.log(`PDF: Evaluating table cell formula for ${field.id}_${row}_${colIndex}:`, col.formula);
-                const formulaResult = evaluateFormula(col.formula, `${field.id}_${row}_${colIndex}`, values, allFields, row, field);
-                cellValue = formulaResult.toString();
-                console.log(`PDF: Table cell formula result: ${formulaResult}`);
+                const formulaResult = evaluateFormula(col.formula, allFields, values, new Set<string>(), row, field);
+                // Only set cellValue if formula returns a valid result
+                if (formulaResult !== null && formulaResult !== 0) {
+                  cellValue = formulaResult.toString();
+                } else if (formulaResult === null) {
+                  cellValue = ''; // Don't show 0 for empty formulas
+                } else {
+                  cellValue = formulaResult.toString(); // Show 0 only if it's an actual calculated 0
+                }
+                console.log(`PDF: Table cell formula result: ${formulaResult} -> cellValue: "${cellValue}"`);
               }
               
-              if (cellValue) {
+              if (cellValue && cellValue !== '') {
                 hasContent = true;
-                lastContentRow = Math.max(lastContentRow, row);
+                rowHasContent = true;
                 
                 const colWidth = columnWidths[colIndex] * PREVIEW_SCALE; // Scale up for text calculations
                 
@@ -401,6 +432,10 @@ async function renderSingleField(
               }
             });
             
+            if (rowHasContent) {
+              lastContentRow = Math.max(lastContentRow, row);
+            }
+            
             rowHeights.push(maxRowHeight);
           }
           
@@ -416,7 +451,7 @@ async function renderSingleField(
             }
           }
           
-          // Check if we need "nothing follows" row
+          // Check if we need "nothing follows" row - only if there's actual content and more rows available
           let nothingFollowsRowHeight = 0;
           if (hasContent && lastContentRow < field.tableConfig.rows - 1) {
             nothingFollowsRowHeight = baseCellHeight;
@@ -442,7 +477,6 @@ async function renderSingleField(
           }
           
           // Convert measurements to PDF units for drawing
-          const pdfRowHeights = rowHeights.map(h => h / PREVIEW_SCALE);
           const pdfRowYPositions = rowYPositions.map(pos => pos / PREVIEW_SCALE);
           const pdfNothingFollowsHeight = nothingFollowsRowHeight / PREVIEW_SCALE;
           const pdfColumnWidths = columnWidths; // Already in PDF units
@@ -498,11 +532,19 @@ async function renderSingleField(
               let cellValue = values[`${field.id}_${row}_${colIndex}`] || '';
               
               // Check if this column has a formula and evaluate it
-              if (field.tableConfig.columns[colIndex].formula && field.tableConfig.columns[colIndex].formula.trim()) {
-                console.log(`PDF: Evaluating table cell formula for ${field.id}_${row}_${colIndex}:`, field.tableConfig.columns[colIndex].formula);
-                const formulaResult = evaluateFormula(field.tableConfig.columns[colIndex].formula, `${field.id}_${row}_${colIndex}`, values, allFields, row, field);
-                cellValue = formulaResult.toString();
-                console.log(`PDF: Table cell formula result: ${formulaResult}`);
+              const column = field.tableConfig.columns[colIndex];
+              if (column && column.formula && column.formula.trim() && allFields) {
+                console.log(`PDF: Evaluating table cell formula for ${field.id}_${row}_${colIndex}:`, column.formula);
+                const formulaResult = evaluateFormula(column.formula, allFields, values, new Set<string>(), row, field);
+                // Only set cellValue if formula returns a valid result
+                if (formulaResult !== null && formulaResult !== 0) {
+                  cellValue = formulaResult.toString();
+                } else if (formulaResult === null) {
+                  cellValue = ''; // Don't show 0 for empty formulas
+                } else {
+                  cellValue = formulaResult.toString(); // Show 0 only if it's an actual calculated 0
+                }
+                console.log(`PDF: Table cell formula result: ${formulaResult} -> cellValue: "${cellValue}"`);
               }
               
               if (cellValue !== null && cellValue !== undefined && cellValue !== '') {
@@ -549,8 +591,8 @@ async function renderSingleField(
             currentX += colWidth;
           }
           
-          // Draw "nothing follows" text in its own row
-          if (showNothingFollows) {
+          // Draw "nothing follows" text in its own row - only if there's actual content
+          if (showNothingFollows && hasContent) {
             const nothingFollowsY = pdfY + pdfHeight - pdfRowYPositions[visibleRows] - (pdfNothingFollowsHeight / 2);
             
             // Calculate text width for proper centering

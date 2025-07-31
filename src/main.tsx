@@ -31,6 +31,7 @@ const AdminDocument = lazy(() =>
   wait(1300).then(() => import("./components/adminPerRole/documents/Document.tsx")
 ));
 
+
 const Dashboard = lazy(() => 
   wait(1300).then(() => import("./pages/AdminPerRole/Dashboard.tsx")
 ));
@@ -39,12 +40,16 @@ const UserManage = lazy(() =>
   wait(1300).then(() => import("./pages/Admin/UserManagement.tsx")
 ));
 
+const Admin = lazy(() => 
+  wait(1300).then(() => import("./pages/Admin/Dashboard.tsx")
+));
+
 const Page2 = lazy(() => 
   wait(1300).then(() => import("./screens/page2.tsx")
 ));
 
 const AdminDashboard = lazy(() => 
-  wait(1300).then(() => import("./pages/Admin/AdminDashboard.tsx")
+  wait(1300).then(() => import("./pages/Admin/Admin.tsx")
 ));
 
 const UserMainContainer = lazy(() => 
@@ -153,9 +158,20 @@ const router = createBrowserRouter([
       </Suspense>
     ),
     children: [
-      { index: true, element: <Navigate to="/redocs/admin/user" replace /> },
       {
-        path: "user",
+        path: "/redocs/admin", 
+        element: <Navigate to="/redocs/admin/dashboard" />, 
+      },
+      {
+        path: "/redocs/admin/dashboard",
+        element: (
+          <Suspense fallback={<LoaderPage />}>
+            <Admin />
+          </Suspense>
+        ),
+      },
+      {
+        path: "/redocs/admin/user",
         element: (
           <Suspense fallback={<LoaderPage />}>
             <UserManage />
@@ -163,7 +179,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "document",
+        path: "/redocs/admin/document",
         element: (
           <Suspense fallback={<LoaderPage />}>
             <DocumentManage />
@@ -171,7 +187,7 @@ const router = createBrowserRouter([
         ),
       },
       {
-        path: "test",
+        path: "/redocs/admin/test",
         element: (
           <Suspense fallback={<LoaderPage />}>
             <FormFiller />
